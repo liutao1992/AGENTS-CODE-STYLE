@@ -1,0 +1,6 @@
+interface:
+  display_name: "后端代码审查"
+  short_description: "审查 Java 后端变更的分层、模型、SQL 与事务问题，提供定位和证据"
+  default_prompt: "使用 $backend-code-review 审查当前后端变更，按严重程度报告有证据的问题和验证范围。"
+policy:
+  allow_implicit_invocation: true
