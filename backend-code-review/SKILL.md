@@ -1,6 +1,6 @@
 ---
 name: backend-code-review
-description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变更，检查包与模型归属、分层、业务兼容性、安全、映射、SQL、事务、并发和必要测试。用于代码审查及开发后的自检，输出有定位与证据的发现；纯审查默认不修改代码。
+description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变更，检查包与模型归属、分层、SOLID、业务兼容性、安全、映射、SQL、事务、并发和必要测试。用于代码审查及开发后的自检，输出有定位与证据的发现；纯审查默认不修改代码。
 ---
 
 # Backend Code Review
@@ -28,6 +28,7 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 | --- | --- | --- |
 | Java、模型、Package | [Java](../java-spring-backend/references/coding/java.md) | 职责与包归属，Request / Query / DTO / BO / DO / VO 分类，复用，模型风格及例外 |
 | Spring、Service、Controller | [Spring](../java-spring-backend/references/coding/spring.md)、[分层](../java-spring-backend/references/architecture/layering.md) | Controller 越层、HTTP 语义下沉、反向依赖、跨模块访问、无必要 Manager 或抽象 |
+| 架构与 SOLID | [分层](../java-spring-backend/references/architecture/layering.md) | SRP 职责混杂、OCP 真实扩展点、LSP 契约一致性、ISP 接口边界、DIP 对易变技术细节的耦合，以及是否以 SOLID 为理由过度抽象 |
 | API 与业务行为 | [API](../java-spring-backend/references/api/api-design.md)、[Java](../java-spring-backend/references/coding/java.md) | 未授权的 API 变化，字段语义、状态、默认值、校验与兼容行为，敏感字段暴露 |
 | MyBatis 与映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md)、[SQL](../java-spring-backend/references/database/sql.md) | Mapper 职责、TypeHandler 归属、显式映射、数据库拼音泄漏、参数绑定与动态 SQL 白名单 |
 | 数据库结构与 SQL | [数据库设计](../java-spring-backend/references/database/database-design.md)、[SQL](../java-spring-backend/references/database/sql.md) | 拼音术语复用、约束、数据完整性、注入、SELECT *、N+1、分页稳定性、写入条件 |
@@ -38,11 +39,221 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 
 只修改 SQL 时不因表中已有拼音字段就报告 Java 命名问题；仅查询多个 Mapper 不构成事务缺失证据。评估缺陷要结合具体调用和业务要求，不按关键词机械判定。
 
+## SOLID 审查原则
+
+SOLID 是代码设计审查维度，不是要求所有代码套用接口、设计模式或额外分层的模板。
+
+只有当本次变更出现真实的职责混乱、扩展困难、契约破坏、接口污染或对易变技术实现的强耦合时，才形成 SOLID 相关发现。
+
+不得仅因为存在另一种“更优雅”的设计就报告问题。
+
+### S — 单一职责原则（SRP）
+
+检查类、接口或模块是否同时承担多个明显不同且独立变化的职责。
+
+重点检查：
+
+- Service 是否同时承担 HTTP、SQL、第三方协议、文件解析、数据库字段转换等无关职责；
+- Controller 是否混入业务流程；
+- Mapper 是否混入业务决策；
+- 通用技术组件是否混入具体业务逻辑；
+- 一个类是否因为职责混杂导致修改一个需求时需要同时触碰多个不相关领域。
+
+例如，以下情况可以形成发现：
+
+```text
+PlaceService
+  ├─ 场所审核业务流程
+  ├─ HTTP 状态码构造
+  ├─ 第三方 SDK 调用细节
+  └─ JSON 字段解析
+```
+
+但不要机械认为：
+
+```text
+一个类方法较多
+→ 一定违反 SRP
+```
+
+也不要仅为满足 SRP 建议“一方法一类”或大量无价值的 Manager / Converter。
+
+---
+
+### O — 开闭原则（OCP）
+
+检查本次变更是否在一个已经存在明确、多实现、稳定变化方向的核心流程中继续增加大量分支，而项目已有或确实需要稳定扩展点。
+
+例如：
+
+```text
+if (type == A) ...
+else if (type == B) ...
+else if (type == C) ...
+```
+
+只有在以下情况更值得报告：
+
+- 同类分支持续增加；
+- 每增加一种类型都必须修改核心流程；
+- 已有明确扩展机制却被绕过；
+- 不同分支存在明显独立且稳定的策略职责。
+
+不要因为当前只有两个简单分支，就机械要求：
+
+```text
+Strategy + Factory
+```
+
+也不要为了“未来可能扩展”提出没有现实依据的抽象。
+
+---
+
+### L — 里氏替换原则（LSP）
+
+检查新增或修改的实现类能否保持父类或接口已有契约。
+
+重点检查：
+
+- 实现类是否缩小可接受输入范围；
+- 是否改变既有返回语义；
+- 是否新增调用方无法合理预期的副作用；
+- 是否改变 Null、异常或状态变化约定；
+- 是否通过 `UnsupportedOperationException` 等方式拒绝父类型要求的核心能力。
+
+例如：
+
+```java
+@Override
+public void audit(...) {
+    throw new UnsupportedOperationException();
+}
+```
+
+如果 `audit` 是抽象类型核心契约，这通常说明抽象关系值得检查。
+
+不要仅因为不同实现内部代码不同就认为违反 LSP。
+
+---
+
+### I — 接口隔离原则（ISP）
+
+检查接口是否迫使调用方或实现方依赖大量与自身无关的能力。
+
+重点检查：
+
+- 一个公共 Facade / SPI 是否承担多个不相关能力；
+- 某些实现是否被迫提供大量无意义方法；
+- 调用方是否为了一个很小的能力依赖一个非常宽泛且易变化的接口。
+
+只有存在真实调用边界或实现负担时才建议拆分。
+
+不要根据：
+
+```text
+接口方法数量较多
+```
+
+直接判定违反 ISP。
+
+---
+
+### D — 依赖倒置原则（DIP）
+
+检查高层业务逻辑是否直接耦合易变化的底层技术实现。
+
+重点关注：
+
+- 第三方 SDK；
+- 外部 HTTP 服务；
+- 对象存储；
+- 消息系统；
+- 可替换算法；
+- 多供应商实现；
+- 需要隔离测试的外部技术组件。
+
+例如：
+
+```text
+CaseService
+    ↓
+VendorFaceSdk
+```
+
+如果供应商实现属于易变技术细节，且业务层需要直接理解其协议、异常和对象类型，应检查是否需要稳定适配边界。
+
+但禁止机械报告：
+
+```text
+Service 没有接口
+→ 违反 DIP
+```
+
+也不要要求所有代码改成：
+
+```text
+XxxService
+    ↓
+XxxServiceImpl
+```
+
+Mapper 接口本身通常已经构成数据访问边界，不应仅为了 DIP 再包装无实际价值的 Repository / RepositoryImpl。
+
+---
+
+### SOLID 与过度设计
+
+代码审查必须同时检查“违反 SOLID”和“错误套用 SOLID”两种方向。
+
+以下新增内容如果没有真实职责、替换、扩展或隔离需求，应检查是否属于过度设计：
+
+```text
+ServiceInterface + ServiceImpl
+Strategy
+Factory
+AbstractFactory
+Adapter
+Repository + RepositoryImpl
+大量单方法接口
+只有一个实现且无替换需求的抽象层
+```
+
+正确审查方式：
+
+```text
+职责是否真实混乱？
+        ↓ 是
+考虑 SRP 问题
+
+是否存在真实且稳定的变化方向？
+        ↓ 是
+考虑 OCP
+
+实现是否破坏已有抽象契约？
+        ↓ 是
+考虑 LSP
+
+调用方 / 实现方是否被迫依赖无关能力？
+        ↓ 是
+考虑 ISP
+
+高层业务是否直接耦合易变技术细节？
+        ↓ 是
+考虑 DIP
+```
+
+核心原则：
+
+> SOLID 用来识别真实设计风险，也用来防止错误抽象；不以“更理论化”代替“更适合当前代码”。
+
 ## 发现成立条件
 
 - 指出具体代码位置与适用规则或可复现的触发条件，说明实际影响；纯规范违规也应给出原文规则依据。
 - 核对明确例外：模块统一使用 record 或任务要求时不能按默认 class 规则报错；普通查询默认无显式事务，但一致性快照、锁或原子写入可能需要事务。
 - 新增通用 TypeHandler 错放业务 mapper 包、新增视图模型误用 DTO、HTTP 语义进入 Service 等，按对应领域规则判断；不要扩展为对历史代码的全仓库改造。
+- SOLID 发现必须指出具体职责冲突、变化点、契约破坏、接口负担或技术耦合；不能只写“建议遵循 SOLID”“建议抽接口”之类泛化意见。
+- 不得因为某个类没有接口、没有 Strategy / Factory、没有 Repository 包装就认定违反 SOLID。
+- 如果新增接口、Strategy、Factory、Adapter、Repository 等抽象没有实际多实现、扩展、隔离或复用需求，也可以按“过度设计”形成有证据的维护性发现。
 - 若缺少业务契约而无法确认风险，将其列为待确认事项，不描述成已发生的数据损坏或既定业务缺陷。
 - 同一问题报告一次，建议最小修复方向，不顺带设计无关架构。
 
@@ -52,7 +263,7 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 
 - **严重程度与标题**：P0 为已确认会阻断运行或造成广泛严重损害的紧急问题；P1 为明确的重大功能、安全或数据完整性风险；P2 为局部缺陷或明确的规范违规；P3 为影响较低但有依据的改进项。按实际影响判断，不因规则使用“必须”就升级严重程度。
 - **位置**：文件和精确行号，优先定位本次差异中的相关语句。
-- **证据与影响**：具体触发条件或适用规则、调用关系及影响；引用规范时标明文档与章节。
-- **最小修复建议**：说明应调整什么，不直接改写代码。
+- **证据与影响**：具体触发条件或适用规则、调用关系及影响；引用规范时标明文档与章节。SOLID 类发现应指出对应的 S / O / L / I / D 原则及具体违反原因。
+- **最小修复建议**：说明应调整什么，不直接改写代码；SOLID 问题优先建议最小职责或依赖调整，不自动建议引入新的设计模式。
 
 没有已确认发现时明确写“未发现已确认的问题”，并说明检查范围和局限，不等同于保证没有缺陷。验证情况区分实际运行通过、失败和未执行；已有结果仍适用时可以复用并说明来源，不重复运行。
