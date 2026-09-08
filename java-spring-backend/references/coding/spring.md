@@ -519,24 +519,92 @@ public void audit() {
 
 ---
 
-## 7. `@Transactional`
+## 7. Spring 事务实现机制
 
-`@Transactional` 是 Spring 提供的事务声明机制，不是事务设计本身。
-
-是否需要事务、事务放在哪个一致性边界、隔离级别、传播和锁如何选择，统一读取：
+是否需要事务、事务应该覆盖哪些数据库操作、事务边界应该位于 Service 还是 Manager、隔离级别、传播和锁如何选择，统一读取：
 
 - [transactions.md](../architecture/transactions.md)
 
-Spring 侧重点只检查：
+Spring 这里只负责事务设计如何通过框架机制正确落地。
+
+### 7.1 `@Transactional`
+
+`@Transactional` 是声明式事务机制。
+
+Spring 侧重点检查：
 
 * 注解是否实际经过代理；
 * 自调用是否导致失效；
 * 异常是否被吞掉导致非预期提交；
-* 配置的传播 / rollback 规则是否与事务规范一致。
+* 配置的传播 / isolation / timeout / rollback 规则是否与事务规范一致。
 
 不要因为方法执行 INSERT / UPDATE / DELETE 就机械添加 `@Transactional`。
 
-`rollbackFor` 应根据目标项目异常体系和真实回滚语义决定，不设置“所有事务必须统一写 `rollbackFor = Exception.class`”之类的通用硬规则。
+本 Skill 的事务规范当前约定：新建或显著修改、并且**已经确认确实需要事务**的业务事务方法，默认使用：
+
+```java
+@Transactional(rollbackFor = Exception.class)
+```
+
+但目标项目已经存在统一事务注解、更具体的 `rollbackFor` / `noRollbackFor` 或稳定历史回滚契约时，以项目现有契约为准，不为了统一注解改变行为。
+
+`rollbackFor = Exception.class` 只定义已确定事务的回滚范围，不能替代对“是否需要事务、事务范围是否正确”的判断。
+
+### 7.2 `TransactionTemplate`
+
+`TransactionTemplate` 是 Spring 的编程式事务机制，适合需要显式控制局部事务代码块的场景。
+
+例如：
+
+```java
+@Service
+@RequiredArgsConstructor
+public class PlaceService {
+
+    private final TransactionTemplate transactionTemplate;
+    private final PlaceMapper placeMapper;
+    private final AuditRecordMapper auditRecordMapper;
+
+    public void create(PlaceDO place) {
+        transactionTemplate.executeWithoutResult(status -> {
+            placeMapper.insert(place);
+            auditRecordMapper.insert(buildCreateRecord(place));
+        });
+    }
+}
+```
+
+是否应该由 Service 直接编排 Mapper 仍由 `layering.md` 判断；上例只用于说明 Spring API，不代表推荐所有业务都在 Service 直接访问 Mapper。
+
+适合评估 `TransactionTemplate` 的情况：
+
+```text
+一个方法只有局部数据库代码需要事务
+事务前后存在明显的远程调用 / IO / 复杂计算，需要排除在事务外
+希望事务开始和结束位置在代码中直接可见
+@TransactionaL 自调用 / Proxy 边界会使声明式事务语义难以理解
+项目本身已经统一使用编程式事务处理局部边界
+```
+
+注意：
+
+* `TransactionTemplate` 不依赖 `@Transactional` 的方法代理调用，因此不存在同一种自调用失效问题；
+* `rollbackFor` 是 `@Transactional` 的属性，不适用于 `TransactionTemplate`；
+* 回调异常被捕获并吞掉后，不要默认事务仍会自动回滚；需要失败时应正确传播异常，或者按明确恢复语义调用 `status.setRollbackOnly()`；
+* 不要在模板回调里放入不需要事务的 HTTP / RPC、文件 IO、等待或长耗时计算；
+* 使用哪个 `PlatformTransactionManager`、传播、隔离和超时仍应遵循项目配置和事务规范。
+
+选择原则：
+
+```text
+整个方法天然就是稳定事务边界
+→ 优先 @Transactional
+
+只有一小段代码需要事务，且显式代码块能显著缩短 / 澄清边界
+→ 评估 TransactionTemplate
+```
+
+不要为了规避代理知识或“看起来控制更精细”机械把所有声明式事务改成 `TransactionTemplate`。
 
 ---
 
@@ -667,10 +735,11 @@ AOP
 7. Controller 是否只保留协议边界所需逻辑，当前请求调用者上下文是否按分层规则传递。
 8. OpenAPI / Swagger 是否沿用项目已有文档机制，不机械要求作者注解。
 9. 新增 Bean 前确认确实需要 Spring 生命周期、依赖注入或代理能力。
-10. 使用 `@Transactional`、`@Async`、缓存等代理能力时检查实际代理边界。
-11. Web 异常优先复用统一 Advice / Handler，并读取 `error-handling.md`。
-12. 不硬编码环境配置和敏感凭证。
-13. 修改后执行目标项目已有相关测试和静态检查。
+10. 使用事务能力时先读取 `transactions.md` 判断真实边界，再选择 `@Transactional` 或 `TransactionTemplate`；声明式事务检查代理与 rollback，模板事务检查局部边界、异常传播和 rollback-only。
+11. 使用 `@Async`、缓存等代理能力时检查实际代理边界。
+12. Web 异常优先复用统一 Advice / Handler，并读取 `error-handling.md`。
+13. 不硬编码环境配置和敏感凭证。
+14. 修改后执行目标项目已有相关测试和静态检查。
 
 检查重点：
 
@@ -689,7 +758,9 @@ AOP
 * 是否创建无必要 Spring Bean；
 * 是否硬编码环境配置；
 * `@Transactional` / `@Async` / `@Cacheable` 是否可能因自调用绕过代理；
-* 是否无依据强制所有事务设置统一 `rollbackFor`；
+* 已确认需要的新增声明式业务事务是否按事务规范明确 rollbackFor，是否无授权覆盖项目更具体回滚契约；
+* `TransactionTemplate` 是否只覆盖必要代码块，回调异常是否被吞掉而未正确决定回滚；
+* 是否为了绕过代理或个人偏好机械把 `@Transactional` 改成 `TransactionTemplate`；
 * Web 异常是否重复在 Controller 手工处理；
 * Service / Manager 是否无必要依赖 HTTP 类型；
 * 是否为了 Spring 形式顺带改造无关代码。
