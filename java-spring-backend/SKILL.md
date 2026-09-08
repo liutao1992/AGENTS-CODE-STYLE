@@ -84,6 +84,8 @@ SOLID
 ```text
 @RestController / @Controller
 Bean Validation / @Valid
+重复结构校验 / Service 二次校验
+必填字段默认兜底
 依赖注入
 Spring Bean 生命周期
 @ConfigurationProperties
@@ -305,6 +307,9 @@ Mock / Testcontainers
 只给 Controller 增加 @Valid
 → Spring
 
+发现 Request 已 @NotBlank，Service 又 hasText 二次校验
+→ Spring
+
 新增 Mapper ResultMap
 → MyBatis
 
@@ -346,6 +351,8 @@ Mock / Testcontainers
 - 普通业务模型默认使用普通 `class` 和项目现有 Lombok 风格；不为了减少样板代码主动换成 `record`。
 - 数据库物理命名与 Java 英文业务语义通过 Mapper / ResultMap 隔离。
 - Client / Adapter 负责第三方协议细节；Manager 只有在存在真实应用级复用、组合或原子能力时才引入。
+- 已由可信入站边界通过 Bean Validation 保证的结构约束，不在 Service / Manager 机械重复同义 `null` / blank / size 校验；多入口场景应补齐真正缺失的入口或公共契约。
+- 已声明必填或非空的字段不得通过 `""`、`0`、默认编码、默认状态等无依据兜底掩盖非法输入；只有既有契约明确要求时才允许默认行为。
 - SOLID 用于解决真实职责和依赖问题，不用于机械创建 `Interface + Impl`、Strategy、Factory、Repository 或额外层级。
 
 ---
