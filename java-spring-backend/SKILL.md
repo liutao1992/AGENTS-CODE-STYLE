@@ -28,13 +28,14 @@ description: 按团队后端规范开发、修复和重构 Java、Spring Boot、
 
 | 任务或触发条件 | 加载规范 |
 | --- | --- |
-| 普通 Java 修改；新增或调整模型、Package | [Java](references/coding/java.md) |
-| Controller / HTTP API | [Java](references/coding/java.md)、[Spring](references/coding/spring.md)、[API](references/api/api-design.md) |
-| Service / Manager 业务流程、Spring 配置与组件 | [Java](references/coding/java.md)、[Spring](references/coding/spring.md) |
-| 分层、职责调整、跨模块调用 | [分层](references/architecture/layering.md) |
-| Mapper、ResultMap、TypeHandler、MyBatis 基础设施 | [MyBatis](references/coding/mybatis.md)、[SQL](references/database/sql.md)；涉及 Java 类型同时加载 Java |
+| 普通 Java 实现、Lombok、class / record、集合、异常、日志 | [Java](references/coding/java.md) |
+| 新增或调整模型、Package、职责边界 | [分层](references/architecture/layering.md)；涉及 Java 实现方式同时加载 [Java](references/coding/java.md) |
+| Controller / HTTP API | [分层](references/architecture/layering.md)、[Java](references/coding/java.md)、[Spring](references/coding/spring.md)、[API](references/api/api-design.md) |
+| Service / Manager 业务流程、Spring 配置与组件 | [分层](references/architecture/layering.md)、[Java](references/coding/java.md)、[Spring](references/coding/spring.md) |
+| 分层、职责调整、跨模块调用、SOLID | [分层](references/architecture/layering.md) |
+| Mapper、ResultMap、TypeHandler、MyBatis 基础设施 | [分层](references/architecture/layering.md)、[MyBatis](references/coding/mybatis.md)、[SQL](references/database/sql.md)；涉及 Java 类型同时加载 Java |
 | SQL 编写或优化 | [SQL](references/database/sql.md) |
-| 表、字段、索引、约束、数据库模型 | [数据库设计](references/database/database-design.md)、[SQL](references/database/sql.md)；涉及 Java 映射同时加载 MyBatis |
+| 表、字段、索引、约束、数据库模型 | [数据库设计](references/database/database-design.md)、[SQL](references/database/sql.md)；涉及 Java 映射同时加载 MyBatis 和分层 |
 | @Transactional、传播、隔离级别、锁、查询后修改、一致性快照 | [事务](references/architecture/transactions.md) |
 | CompletableFuture、@Async、Executor、线程池、跨线程上下文 | [并发](references/architecture/concurrency.md)；涉及事务时同时加载事务 |
 | Bug 修复、行为变化、测试修改 | 对应领域规范与[测试](references/coding/testing.md) |
@@ -46,13 +47,13 @@ description: 按团队后端规范开发、修复和重构 Java、Spring Boot、
 
 1. 先说明该类负责什么，搜索已有等价能力及同类组件所在位置。
 2. 按职责识别业务组件、Web 输入、查询条件、内部传输、业务中间模型、持久化模型、视图输出或框架基础设施。
-3. 新增模型先读取 Java 规范，判断 Request / Query / DTO / BO / DO / VO；不要统一塞进 dto，也不要为每一层机械创建模型或 Converter。
-4. 新增技术组件读取其领域规范，按组件自身职责确定 Package，不按当前使用者归属。
+3. 新增模型先读取分层规范，判断 Request / Query / DTO / BO / DO / VO 及 Package；再读取 Java 规范确定 Lombok、`class` / `record` 等实现方式。不要统一塞进 dto，也不要为每一层机械创建模型或 Converter。
+4. 新增技术组件先按分层规范判断技术职责，再读取其领域规范确定具体 Package 和实现方式，不按当前使用者归属。
 5. 确认正确包名、命名和复用方式后再创建文件。
 
 使用规范中的具体判断及例外：
 
-- 通用 MyBatis TypeHandler 属于 common.mybatis.handler，不因某个业务 Mapper 使用而放进业务 mapper 包。
+- 通用 MyBatis TypeHandler 属于 `common.mybatis.handler`，不因某个业务 Mapper 使用而放进业务 mapper 包。
 - 具体业务返回模型优先使用模块 `vo` 包中的 `*VO`；统一 HTTP 响应包装默认使用 `ApiResponse<T>`。如果目标项目已有其他统一响应类型、历史 API 或序列化契约，以项目现有约定为准，不得为了本 Skill 强制替换。也不因此无授权重命名已有公共 API。
 - 业务模型默认普通 class，使用 Lombok 生成无业务逻辑的访问器；模块明确统一使用 record 或任务明确要求时允许 record。不机械给所有字段添加 Setter。
 - 数据库拼音通过显式映射转换为 Java 英文属性；示例词汇需结合目标项目已有数据字典，不自行创造第二套术语。
