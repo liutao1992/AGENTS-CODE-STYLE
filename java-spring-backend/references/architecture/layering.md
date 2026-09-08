@@ -10,6 +10,7 @@
 
 相关规范：
 
+- [项目与业务模块目录](project-structure.md)
 - [Java 编码](../coding/java.md)
 - [Spring](../coding/spring.md)
 - [API 设计](../api/api-design.md)
@@ -78,7 +79,7 @@ client
 integration
 ```
 
-等物理 Package。具体目录优先遵循目标项目已有结构。
+等物理 Package。具体目录优先遵循目标项目已有结构；新项目或新增业务模块的默认物理组织读取 `project-structure.md`。
 
 ---
 
@@ -294,10 +295,10 @@ Controller 属于 HTTP 入站适配器。
 主要职责：
 
 * HTTP 参数绑定；
-* 基础参数校验；
-* 获取请求上下文；
+* 结构性参数校验；
+* 获取当前请求相关的调用者上下文；
 * 调用 Service；
-* 返回项目统一 HTTP 响应。
+* 完成必要的协议层转换和统一响应包装。
 
 禁止：
 
@@ -305,7 +306,22 @@ Controller 属于 HTTP 入站适配器。
 * 编写 SQL；
 * 定义业务事务；
 * 承载业务状态流转；
-* 直接操作数据库对象完成业务流程。
+* 直接操作数据库对象完成业务流程；
+* 在 Controller 中进行跨数据源业务拼装或复杂业务计算。
+
+如果当前用户、部门、租户、数据权限等信息来自 HTTP Request、SecurityContext 或请求 ThreadLocal，优先在入站边界取得，并在业务确实需要时以职责明确的 `Operator` / `CallerContext` / 项目已有上下文对象显式传给 Service。
+
+不要让 Service / Manager 为了取得“当前请求用户”直接依赖：
+
+```text
+HttpServletRequest
+RequestContextHolder
+请求专用 ThreadLocal 工具
+```
+
+因为 Service 还可能被 RPC、Consumer、Scheduled Task 或其他模块调用。
+
+如果目标项目已经提供能够覆盖多入口、职责清晰的统一调用上下文机制，则沿用项目机制，不为了本规则再创建第二套 Context。
 
 HTTP 注解、Bean Validation、统一异常处理等 Spring 机制读取：
 
@@ -317,7 +333,7 @@ URL、Method、响应包装和兼容契约读取：
 
 原则：
 
-> Controller 保持轻量，只表达 HTTP 入站边界。
+> Controller 保持轻量：做协议边界必须做的事情，把业务决策和业务数据组装交给业务层。
 
 ---
 
@@ -356,6 +372,43 @@ bindEquipment
 原则：
 
 > Service 表达业务用例，不成为 HTTP、SQL 和供应商技术细节的混合层。
+
+## 4.1 Service 过大时按业务能力拆分
+
+Service 文件变大只是一个信号，真正需要判断的是它是否同时承担多个能够独立命名、独立变化的业务能力。
+
+例如订单模块确实存在稳定而不同的用例时，可以根据职责拆成：
+
+```text
+OrderQueryService
+OrderCreateService
+OrderDeliveryService
+```
+
+而不是把所有能力长期堆在一个无限增长的 `OrderService` 中。
+
+但禁止仅根据：
+
+```text
+类超过 N 行
+方法超过 N 个
+```
+
+就机械拆 Service。
+
+也不要为了减少主 Service 行数，创建没有独立业务职责、只负责转发的：
+
+```text
+OrderHelperService
+OrderCommonService
+OrderValidatorService
+```
+
+除非这些能力确实具有稳定复用和独立职责。
+
+原则：
+
+> Service 按业务用例和变化原因拆分，不按文件长度拆分；拆分后的名称应能够说明它独立负责什么。
 
 ---
 
@@ -432,9 +485,9 @@ SQL 规则读取：
 
 ---
 
-## 6.1 Client / Adapter
+# 6.1 Client / Adapter
 
-Client / Adapter 负责与数据库之外的外部技术系统交互，例如：
+Client / Adapter 与 Mapper / DAO 同属于出站边界，但负责数据库之外的外部技术系统，例如：
 
 ```text
 HTTP / RPC
@@ -543,6 +596,10 @@ PlaceMapper
 直接访问其他模块 Mapper 会绕过业务规则并耦合数据库实现。
 
 但不要为了形式机械创建 Facade；已有 Service 能稳定表达跨模块能力时直接复用。
+
+业务模块的物理目录和 `module` 组织读取：
+
+- [project-structure.md](project-structure.md)
 
 ---
 
@@ -769,7 +826,7 @@ Configuration → common.mybatis.config
 
 > “当前模块需要这个类”不等于“这个类属于当前模块”。
 
-具体技术组件的 Package 仍以对应领域规范和目标项目已有结构为准。
+具体技术组件的 Package 仍以对应领域规范和目标项目已有结构为准；项目根目录、`module`、`common` 等物理组织读取 `project-structure.md`。
 
 ---
 
@@ -834,18 +891,22 @@ DTO / BO
 1. 查看当前模块已有分层和调用关系。
 2. 搜索至少一个类似实现。
 3. 判断属于入站适配、Service、Manager、Mapper、Client / Adapter、模型还是技术基础设施。
-4. 新增类先确定职责，再确定 Package。
-5. 新增模型按本文判断 Request / Query / DTO / BO / DO / VO，再读取 Java 规范确定实现方式。
-6. 第三方集成先区分技术适配和应用编排：协议细节属于 Client / Adapter，真实复用组合才考虑 Manager。
-7. 涉及异常读取 `error-handling.md`。
-8. 涉及事务读取 `transactions.md`。
-9. 涉及并发读取 `concurrency.md`。
+4. 新增模块或 Package 时读取 `project-structure.md`，先延续目标项目已有物理结构。
+5. 新增类先确定职责，再确定 Package。
+6. 新增模型按本文判断 Request / Query / DTO / BO / DO / VO，再读取 Java 规范确定实现方式。
+7. 第三方集成先区分技术适配和应用编排：协议细节属于 Client / Adapter，真实复用组合才考虑 Manager。
+8. 涉及异常读取 `error-handling.md`。
+9. 涉及事务读取 `transactions.md`。
+10. 涉及并发读取 `concurrency.md`。
 
 编码后检查：
 
 * 入站适配器是否直接访问 Mapper；
 * Controller / RPC Endpoint / Consumer 是否互相调用而不是复用 Service；
+* Controller 是否包含业务逻辑、复杂业务拼装或事务；
+* 请求绑定的当前用户 / 租户上下文是否无必要渗入 Service / Manager 的 Web ThreadLocal 依赖；
 * Service 是否混入 HTTP、SQL、第三方 SDK 类型或协议细节；
+* Service 过大时是否存在能够按真实业务能力拆分的独立职责，而不是按行数机械拆类；
 * Manager 是否只是为了包一层 Client / Mapper 而存在；
 * Client / Adapter 是否承担完整业务流程；
 * Mapper 是否包含业务判断或第三方调用；
@@ -864,4 +925,4 @@ DTO / BO
 
 最终原则：
 
-> 先确定职责，再确定 Package；分层规范负责“类是什么、放哪里”，专项规范负责“具体怎么实现”。
+> 先确定职责，再确定 Package；分层规范负责“类是什么、放哪里”，目录规范负责“项目和模块如何物理组织”，专项规范负责“具体怎么实现”。
