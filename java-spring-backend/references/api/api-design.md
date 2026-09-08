@@ -22,7 +22,7 @@ Spring MVC 注解、Validation 和 Advice 机制读取：
 
 > API 是稳定契约，不应随着数据库结构或内部实现随意变化。
 
-> 具体业务输出优先使用 VO；统一 HTTP 响应包装默认推荐 `ApiResponse<T>`。目标项目已有其他统一响应类型、历史 API 或序列化契约时，以项目现有约定为准。
+> 具体业务输出使用 VO；统一 HTTP 响应包装默认推荐 `ApiResponse<T>`。目标项目已有其他统一响应包装、历史 API 或序列化契约时，以项目现有约定为准。
 
 ---
 
@@ -241,7 +241,7 @@ placeCode
 
 ## 8. VO 与统一响应
 
-具体业务输出优先使用 VO，例如：
+具体业务输出使用 VO，例如：
 
 ```text
 PlaceVO
@@ -254,15 +254,7 @@ VO 的职责和 Package 读取：
 
 - [layering.md](../architecture/layering.md#96-vo)
 
-具体业务视图不机械新建：
-
-```text
-PlaceResponse
-PlaceStatsResponse
-place.response.*
-```
-
-但已发布历史 `*Response` 模型不得为了统一命名无授权迁移。
+不要为了区分“业务输出”和“HTTP 输出”再增加一层职责相同的模型。只有输出职责、契约或数据语义真实发生变化时才进行必要转换。
 
 统一 HTTP 响应默认推荐：
 
@@ -278,20 +270,22 @@ PlaceVO
 ApiResponse<PlaceVO>
 ```
 
-`ApiResponse<T>` 是本 Skill 的默认推荐，不是覆盖目标项目现有契约的强制要求。
+`ApiResponse<T>` 是 HTTP 外层包装，不是具体业务输出模型，也不参与 Request / Query / DTO / BO / DO / VO 的模型职责分类。
+
+`ApiResponse<T>` 是本 Skill 的默认推荐，不是覆盖目标项目现有 HTTP 包装契约的强制要求。
 
 如果目标项目已经存在：
 
-* 其他统一响应类型；
+* 其他统一响应包装；
 * 固定 JSON 字段结构；
 * 全局异常响应格式；
 * 已发布 API 契约；
 
-必须继续复用项目已有类型和语义，不得为了本 Skill 平行创建第二套包装或批量修改历史接口。
+必须继续复用项目已有 HTTP 契约和语义，不得为了本 Skill 平行创建第二套包装或批量修改历史接口。
 
 禁止直接把数据库 DO 作为接口输出。
 
-> 业务数据模型使用 VO；统一 HTTP 包装属于 API 契约，不属于业务模型分类。
+> 具体业务输出模型使用 VO；`ApiResponse<T>` 等统一 HTTP 包装只负责传输层响应结构。
 
 ---
 
@@ -535,7 +529,7 @@ public ApiResponse<PlaceVO> detail(
 
 `ApiResponse.success(...)` 只是默认示例构造方式；具体方法名、字段结构和序列化契约以目标项目实际实现为准。
 
-如果项目已有其他统一响应类型或历史 API，继续沿用项目现有设计。
+如果项目已有其他统一 HTTP 响应包装或历史 API，继续沿用项目现有设计。
 
 Controller 的分层职责统一读取 `layering.md`，Spring 注解和 Validation 使用读取 `spring.md`。
 
@@ -561,8 +555,8 @@ Controller 的分层职责统一读取 `layering.md`，Spring 注解和 Validati
 
 * API 是否保持兼容；
 * DO / 数据库物理字段是否泄漏；
-* 业务输出是否错误新增 `*Response` 而不是项目约定 VO；
-* `ApiResponse<T>` 是否只是默认推荐而没有覆盖项目已有统一响应；
+* 具体业务输出是否使用项目约定的 VO；
+* `ApiResponse<T>` 是否只是默认推荐而没有覆盖项目已有统一 HTTP 包装；
 * 动态排序是否安全；
 * 错误码和错误信息是否稳定、安全；
 * 客户端身份、租户和数据范围参数是否被错误信任；
@@ -570,4 +564,4 @@ Controller 的分层职责统一读取 `layering.md`，Spring 注解和 Validati
 
 最终原则：
 
-> API 规范只维护对外契约；分层、Spring 实现和异常流转分别由对应专项规范维护。
+> API 规范只维护对外契约；具体业务输出使用 VO，统一 HTTP 包装与业务输出模型职责分离；分层、Spring 实现和异常流转分别由对应专项规范维护。
