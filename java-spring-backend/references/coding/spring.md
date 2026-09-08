@@ -16,7 +16,7 @@
 
 > HTTP 语义不得向 Service / Manager 扩散。
 
-> 具体业务接口输出统一优先使用 VO；Response 仅用于项目级通用 HTTP 响应包装。
+> 具体业务接口输出统一优先使用 VO；统一 HTTP 响应包装默认使用 `ApiResponse<T>`。如果目标项目已有其他统一响应类型、历史 API 或序列化契约，以项目现有约定为准。
 
 > 不根据推测自行创造业务状态、编码、默认值或兼容规则。
 
@@ -376,7 +376,7 @@ Builder
 
 ---
 
-## 9. Request / VO / 通用 Response
+## 9. Request / VO / ApiResponse<T>
 
 接口输入使用明确的 Request；具体业务接口输出统一优先使用 VO。
 
@@ -395,7 +395,7 @@ PlaceVO
      ↓
 Controller
      ↓
-HTTP Response
+ApiResponse<PlaceVO>
 ```
 
 数据库 DO：
@@ -406,7 +406,7 @@ PlaceDO
 
 不得因为方便直接暴露给客户端。
 
-本项目模型语义：
+本项目默认模型语义：
 
 ```text
 Request
@@ -415,8 +415,8 @@ Request
 VO
 → 具体业务视图输出
 
-Response
-→ 项目级通用 HTTP 响应包装概念
+ApiResponse<T>
+→ 通用 HTTP 响应包装
 ```
 
 例如具体业务返回模型优先：
@@ -435,7 +435,13 @@ PlaceStatsResponse
 place.response.*
 ```
 
-通用响应包装应复用目标项目已有类型。本 Skill 不固定统一响应类名，也不使用具体项目的响应包装类型作为示例。
+统一 HTTP 响应包装默认使用：
+
+```text
+ApiResponse<T>
+```
+
+但这是 Skill 的默认推荐，不是覆盖项目现有约定的强制要求。如果目标项目已经存在其他统一响应类型、固定序列化结构或已发布 API 契约，必须优先遵循目标项目，不得为了改成 `ApiResponse<T>` 进行无需求迁移。
 
 不得为了统一命名擅自修改已经发布的公共 API；现有历史 `*Response` 模型仅在当前任务明确要求或兼容性允许时迁移。
 
@@ -819,9 +825,10 @@ AOP
 6. 检查是否真的需要事务。
 7. 检查是否引入 HTTP 语义到 Service / Manager。
 8. 检查具体业务输出是否正确使用 VO，是否直接暴露 DO。
-9. 检查是否存在不必要的 Spring Bean 或抽象。
-10. 检查完整调用链。
-11. 执行相关测试。
+9. 检查统一响应包装是否遵循目标项目；仅在项目没有既有约定时采用 `ApiResponse<T>` 默认方案。
+10. 检查是否存在不必要的 Spring Bean 或抽象。
+11. 检查完整调用链。
+12. 执行相关测试。
 
 ---
 
@@ -852,6 +859,8 @@ AOP
 * DO 是否直接作为 API 输出；
 * 具体业务输出是否使用 VO；
 * 是否错误新增 `*Response` 作为业务视图模型；
+* 默认新接口是否使用 `ApiResponse<T>`，或者是否有明确的项目级统一响应约定；
+* 是否为了迁移到 `ApiResponse<T>` 擅自破坏已有响应契约；
 * Request / Query / DTO / BO / DO / VO 是否职责明确；
 * 输入标准化是否改变业务语义。
 
@@ -879,4 +888,4 @@ AOP
 
 最终原则：
 
-> Controller 只处理接口边界，Service 表达业务流程，Manager 承担真正需要复用或原子化的能力；具体业务输出使用 VO，HTTP 语义止于 Web 层，业务规则必须有依据，事务和并发必须有真实需求。
+> Controller 只处理接口边界，Service 表达业务流程，Manager 承担真正需要复用或原子化的能力；具体业务输出使用 VO，统一响应默认使用 `ApiResponse<T>` 但以目标项目既有约定为准；HTTP 语义止于 Web 层，业务规则必须有依据，事务和并发必须有真实需求。
