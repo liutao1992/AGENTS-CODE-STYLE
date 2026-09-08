@@ -11,33 +11,59 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 
 - 先阅读目标项目适用的 AGENTS.md。纯审查默认只读，不自动修复、重命名、格式化、更新快照或安装依赖，不自动发布评论或创建独立代理。
 - 开发任务引用本流程自检时，修复权限来自原开发任务，仅限其已授权范围；本 Skill 本身不扩大权限。
-- 与 java-spring-backend 同级放置，直接读取其 references，不加载开发 Skill 的实施流程，不维护第二套规范副本。
+- 与 `java-spring-backend` 同级放置，直接读取其 references，不加载开发 Skill 的实施流程，不维护第二套规范副本。
 - 所有路径相对所在文档解析，不以被审查项目的工作目录为基准。配套 references 缺失时说明规范检查受限；仍可完成有证据支持的正确性审查，但不能宣称已完整验证团队规范。
 
 ## 审查流程
 
-1. **确定范围。** 优先使用用户明确指定的文件、差异或提交范围。未指定时检查本地已暂存、未暂存变更及相关未跟踪新增文件；不要仅看 git diff 而遗漏暂存和新增文件。可只读使用 git status --short、git diff、git diff --cached 和 git ls-files --others --exclude-standard。没有可识别范围时询问，不默认审查全仓库，也不猜测比较分支。
+1. **确定范围。** 优先使用用户明确指定的文件、差异或提交范围。未指定时检查本地已暂存、未暂存变更及相关未跟踪新增文件；不要仅看 `git diff` 而遗漏暂存和新增文件。没有可识别范围时询问，不默认审查全仓库，也不猜测比较分支。
 2. **建立上下文。** 阅读完整相关差异、受影响方法与调用者、数据模型、相关契约、测试和可用近期历史；搜索类似实现。文件审查无历史时按现有代码评估，不假装已确认何时引入问题。
 3. **选择规范。** 按下表加载实际涉及的领域；新增领域取并集，不递归读取所有参考文档。
-4. **验证发现。** 沿调用和数据流确认触发条件与影响，区分本次引入的问题和既有问题，核对规范例外。若需要验证推断，执行已有的不改写源文件的相关测试或静态检查；不执行数据库迁移、格式化或影响共享环境的操作。
+4. **验证发现。** 沿调用和数据流确认触发条件与影响，区分本次引入的问题和既有问题，核对规范例外。需要验证推断时，只运行已有且不会改写源文件或影响共享环境的相关测试、静态检查。
 5. **形成结果。** 按严重程度排序并合并同根因发现。对差异审查，优先报告本次引入或加剧的问题；无关既有问题不混入本次发现。说明未验证项，不自动进入修复流程。
 
 ## 规范与检查重点
 
 | 涉及领域 | 参考规范 | 检查重点 |
 | --- | --- | --- |
-| Java、模型、Package | [Java](../java-spring-backend/references/coding/java.md) | 职责与包归属，Request / Query / DTO / BO / DO / VO 分类，复用，模型风格及例外 |
+| Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、Lombok、`class` / `record`、方法、集合、异常、日志及模型的 Java 实现风格 |
+| 模型、Package、分层与 SOLID | [分层](../java-spring-backend/references/architecture/layering.md) | 职责与包归属，Request / Query / DTO / BO / DO / VO 分类，技术基础设施归属，依赖方向，SRP / OCP / LSP / ISP / DIP，以及是否过度抽象 |
 | Spring、Service、Controller | [Spring](../java-spring-backend/references/coding/spring.md)、[分层](../java-spring-backend/references/architecture/layering.md) | Controller 越层、HTTP 语义下沉、反向依赖、跨模块访问、无必要 Manager 或抽象 |
-| 架构与 SOLID | [分层](../java-spring-backend/references/architecture/layering.md) | SRP 职责混杂、OCP 真实扩展点、LSP 契约一致性、ISP 接口边界、DIP 对易变技术细节的耦合，以及是否以 SOLID 为理由过度抽象 |
-| API 与业务行为 | [API](../java-spring-backend/references/api/api-design.md)、[Java](../java-spring-backend/references/coding/java.md) | 未授权 API 变化，具体业务输出是否使用 VO，Response 是否只作为通用 HTTP 包装，字段语义、状态、默认值、校验与兼容行为，敏感字段暴露 |
-| MyBatis 与映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md)、[SQL](../java-spring-backend/references/database/sql.md) | Mapper 职责、TypeHandler 归属、显式映射、数据库拼音泄漏、参数绑定与动态 SQL 白名单 |
-| 数据库结构与 SQL | [数据库设计](../java-spring-backend/references/database/database-design.md)、[SQL](../java-spring-backend/references/database/sql.md) | 拼音术语复用、约束、数据完整性、注入、SELECT *、N+1、分页稳定性、写入条件 |
+| API 与业务行为 | [API](../java-spring-backend/references/api/api-design.md)、[分层](../java-spring-backend/references/architecture/layering.md) | 未授权 API 变化，具体业务输出是否使用 VO，统一响应是否遵循项目契约，字段语义、状态、默认值、校验、兼容行为与敏感字段暴露 |
+| MyBatis 与映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md)、[SQL](../java-spring-backend/references/database/sql.md)、[分层](../java-spring-backend/references/architecture/layering.md) | Mapper 职责、TypeHandler 等基础设施归属、显式映射、数据库拼音泄漏、参数绑定与动态 SQL 白名单 |
+| 数据库结构与 SQL | [数据库设计](../java-spring-backend/references/database/database-design.md)、[SQL](../java-spring-backend/references/database/sql.md) | 拼音术语复用、约束、数据完整性、注入、`SELECT *`、N+1、分页稳定性、写入条件 |
 | 事务、锁、一致性 | [事务](../java-spring-backend/references/architecture/transactions.md) | 不必要或缺失的事务边界、回滚、传播、自调用、查询后修改竞态 |
 | 并发、异步、线程池 | [并发](../java-spring-backend/references/architecture/concurrency.md) | 实际收益、操作独立性、线程与连接池、上下文、异常；涉及事务同时加载事务规范 |
 | Bug 修复、行为变化、测试 | [测试](../java-spring-backend/references/coding/testing.md) | 有效回归覆盖、重要边界、断言强度、可重复性及真实验证结果 |
 | 权限、租户、数据范围 | 目标项目已有安全规范、契约和实现 | 是否绕过认证或数据隔离、扩大数据范围、硬编码或记录敏感凭证 |
 
 只修改 SQL 时不因表中已有拼音字段就报告 Java 命名问题；仅查询多个 Mapper 不构成事务缺失证据。评估缺陷要结合具体调用和业务要求，不按关键词机械判定。
+
+## 模型与 Package 审查原则
+
+模型职责与 Package 归属以 `layering.md` 为唯一详细事实来源，`java.md` 只负责 Java 实现方式。
+
+新增或调整以下模型时检查：
+
+```text
+Request → 接口输入 → <module>.request
+Query   → 查询条件 → <module>.query
+DTO     → 内部传输 → <module>.dto
+BO      → 业务处理 → <module>.bo
+DO      → 持久化   → <module>.domain
+VO      → 视图输出 → <module>.vo
+```
+
+重点检查：
+
+- 是否把所有数据对象机械放入 `dto`；
+- `Query` 是否因为 Mapper 使用而放入 `mapper`；
+- 具体业务输出是否错误新增为 `*Response` / `response` 包，而不是 VO；
+- DO 是否直接暴露为 HTTP 输出；
+- 通用技术基础设施是否因为被某业务模块使用就放入该业务 Package；
+- 是否机械创建无实际职责的 DTO / BO / Converter / Assembler。
+
+统一 HTTP 响应默认可以使用 `ApiResponse<T>`，但这只是 Skill 默认推荐。如果目标项目已有其他统一响应类型、历史 API 或固定序列化契约，以项目为主，不得为了改成 `ApiResponse<T>` 报错或要求无授权迁移。
 
 ## SOLID 审查原则
 
@@ -59,7 +85,7 @@ SOLID 是代码设计审查维度，不是要求所有代码套用接口、设�
 - 通用技术组件是否混入具体业务逻辑；
 - 一个类是否因为职责混杂导致修改一个需求时需要同时触碰多个不相关领域。
 
-例如，以下情况可以形成发现：
+例如：
 
 ```text
 PlaceService
@@ -68,6 +94,8 @@ PlaceService
   ├─ 第三方 SDK 调用细节
   └─ JSON 字段解析
 ```
+
+可能存在 SRP 问题。
 
 但不要机械认为：
 
@@ -92,7 +120,7 @@ else if (type == B) ...
 else if (type == C) ...
 ```
 
-只有在以下情况更值得报告：
+以下情况更值得报告：
 
 - 同类分支持续增加；
 - 每增加一种类型都必须修改核心流程；
@@ -121,7 +149,7 @@ Strategy + Factory
 - 是否改变 Null、异常或状态变化约定；
 - 是否通过 `UnsupportedOperationException` 等方式拒绝父类型要求的核心能力。
 
-例如：
+如果父类型核心方法只能这样实现：
 
 ```java
 @Override
@@ -130,7 +158,7 @@ public void audit(...) {
 }
 ```
 
-如果 `audit` 是抽象类型核心契约，这通常说明抽象关系值得检查。
+通常应检查抽象关系是否合理。
 
 不要仅因为不同实现内部代码不同就认为违反 LSP。
 
@@ -148,13 +176,7 @@ public void audit(...) {
 
 只有存在真实调用边界或实现负担时才建议拆分。
 
-不要根据：
-
-```text
-接口方法数量较多
-```
-
-直接判定违反 ISP。
+不要根据接口方法数量直接判定违反 ISP。
 
 ---
 
@@ -251,7 +273,8 @@ Repository + RepositoryImpl
 - 指出具体代码位置与适用规则或可复现的触发条件，说明实际影响；纯规范违规也应给出原文规则依据。
 - 核对明确例外：模块统一使用 record 或任务要求时不能按默认 class 规则报错；普通查询默认无显式事务，但一致性快照、锁或原子写入可能需要事务。
 - 新增通用 TypeHandler 错放业务 mapper 包、新增视图模型误用 DTO、HTTP 语义进入 Service 等，按对应领域规则判断；不要扩展为对历史代码的全仓库改造。
-- 新增具体业务输出模型时，如果无兼容性或项目既有风格例外，使用 `*Response` / `response` 包而不是 `*VO` / `vo` 包，可按模型与 API 规范形成发现；`AjaxResult`、`Result<T>`、`ApiResponse<T>`、`PageResponse<T>` 等通用 HTTP 包装不属于此问题。
+- 新增具体业务输出模型时，如果无兼容性或项目既有风格例外，使用 `*Response` / `response` 包而不是 `*VO` / `vo` 包，可按分层与 API 规范形成发现；统一 HTTP 包装类型不属于具体业务模型。
+- `ApiResponse<T>` 是默认推荐而非绝对要求；目标项目已有统一响应契约时必须以项目为主。
 - 不得为了符合 VO 命名而要求无授权地重命名已经发布的历史 API 模型；兼容性优先。
 - SOLID 发现必须指出具体职责冲突、变化点、契约破坏、接口负担或技术耦合；不能只写“建议遵循 SOLID”“建议抽接口”之类泛化意见。
 - 不得因为某个类没有接口、没有 Strategy / Factory、没有 Repository 包装就认定违反 SOLID。
