@@ -1,65 +1,368 @@
 ---
 name: java-spring-backend
-description: 按团队后端规范开发、修复和重构 Java、Spring Boot、MyBatis、PostgreSQL 代码。用于需要判断模型与包归属、应用分层、数据库映射、事务或并发边界的后端任务；纯代码审查使用 backend-code-review。
+description: 按团队后端规范开发、修复和重构 Java、Spring Boot、MyBatis、PostgreSQL 代码。用于需要实现 Java 后端、判断模型与 Package、应用分层、API、数据库映射、事务、并发或测试边界的任务；纯代码审查使用 backend-code-review。
 ---
 
 # Java Spring Backend
 
-将当前任务转成最小、符合现有项目设计的代码变更。先判断任务，再加载相关规范，不一次性读取全部 references。
+将当前任务转成最小、符合目标项目现有设计的代码变更。
+
+核心方式：
+
+> 先判断任务涉及什么，再只加载对应 references；不要因为任务使用 Java / Spring 就一次性读取全部规范。
 
 ## 开始前
 
-- 阅读目标项目适用的 AGENTS.md，遵守当前用户要求及执行权限。纯审查转到配套的 [backend-code-review](../backend-code-review/SKILL.md)，不执行下面的修改步骤。
-- 两个 Skill 必须同级放置；本文件所有链接均相对本文件解析，参考文档内的链接相对该参考文档解析，不以目标项目工作目录为基准。
-- 独立用于其他项目时仍坚持最小修改、优先复用、业务语义稳定和安全边界。不得因套用规范而批量改造历史代码；保留领域规范明确允许的现有风格例外。
+- 阅读目标项目适用的 `AGENTS.md`，遵守当前用户要求和执行权限。
+- 纯代码审查转到配套的 [backend-code-review](../backend-code-review/SKILL.md)，不执行本文件的修改流程。
+- 两个 Skill 保持同级目录；链接相对所在文档解析，不以目标项目当前工作目录为基准。
+- 独立用于其他项目时仍坚持最小修改、优先复用、业务语义稳定和安全边界。
+- 不因套用规范批量迁移历史风格；references 中的默认推荐不能覆盖目标项目已有稳定契约。
+
+---
 
 ## 工作流程
 
-1. 明确任务目标、涉及模块、行为变化及验收要求；通过代码、契约和测试解决可发现的问题，仅对无法确定的关键业务意图询问用户。
-2. 检查构建配置、适用项目规则、相关代码和可用的近期 Git 历史；搜索至少一个类似实现，阅读相关测试。无历史、无类似实现或无测试时记录事实，不假定它们存在。
-3. 根据下表加载相关规范，再确定实现方案。多个领域取并集；开始涉及新领域时补读。读到其他规范链接不意味着必须递归读取，仍按当前任务判断。
-4. 新建文件前执行下方职责判断。涉及数据库时检查已有 Schema、Migration、Mapper 和术语；涉及事务时先确定一致性要求；涉及并发时先确认实际收益及操作独立性。
-5. 实施最小正确变更，复用已有组件，不编造业务规则、兼容行为或默认值，不擅自改变 API、权限、删除与事务语义。发现无关问题单独说明。
-6. 检查当前任务的完整差异及新增文件；使用 [审查流程](../backend-code-review/SKILL.md#审查流程) 自检当前变更，不自动委派代理或扩大审查范围。已获授权的开发任务可修复本次自检发现的问题；纯审查保持只读。
-7. 运行目标项目已有的相关测试、静态检查和架构检查。优先采用构建文件与 CI 定义的命令，不假设一定存在 Maven Wrapper、Spotless、Checkstyle 或 ArchUnit；不因检查缺失而自动安装依赖或新增流水线。
-8. 汇报修改内容、关键行为和实际验证结果。已通过且未受后续变更影响的检查无需重复执行；无法执行的检查说明原因。
+1. **明确任务。** 确认目标、涉及模块、行为变化和验收要求；优先从代码、契约和测试中解决可发现的问题，只对真正无法确定的关键业务意图询问用户。
+2. **建立上下文。** 阅读相关代码、构建配置、类似实现、测试和可用近期 Git 历史。找不到类似实现、测试或历史时如实说明，不假定存在。
+3. **选择规范。** 按下表加载当前实际涉及的 references；任务扩展到新领域时再补读，不递归读取所有链接。
+4. **判断职责。** 新增文件前先判断类的职责和边界，再确定模型类型、Package 和技术实现。
+5. **实现最小变更。** 复用已有组件，不编造业务状态、编码、默认值、兼容行为，不擅自改变 API、权限、删除、事务或数据库约束语义。
+6. **自检。** 检查完整差异和新增文件，按 [backend-code-review](../backend-code-review/SKILL.md) 的审查流程自检当前变更，不自动扩大范围或创建独立代理。
+7. **验证。** 运行目标项目已有的相关测试、静态检查和架构检查；优先使用构建文件与 CI 中已有命令，不假设一定存在 Maven Wrapper、Spotless、Checkstyle 或 ArchUnit。
+8. **汇报。** 说明修改内容、关键行为、实际运行的验证、失败和未执行项；不得把未运行的检查描述为通过。
+
+---
 
 ## 规范选择
 
-| 任务或触发条件 | 加载规范 |
-| --- | --- |
-| 普通 Java 实现、Lombok、class / record、集合、异常、日志 | [Java](references/coding/java.md) |
-| 新增或调整模型、Package、职责边界 | [分层](references/architecture/layering.md)；涉及 Java 实现方式同时加载 [Java](references/coding/java.md) |
-| Controller / HTTP API | [分层](references/architecture/layering.md)、[Java](references/coding/java.md)、[Spring](references/coding/spring.md)、[API](references/api/api-design.md) |
-| Service / Manager 业务流程、Spring 配置与组件 | [分层](references/architecture/layering.md)、[Java](references/coding/java.md)、[Spring](references/coding/spring.md) |
-| 分层、职责调整、跨模块调用、SOLID | [分层](references/architecture/layering.md) |
-| Mapper、ResultMap、TypeHandler、MyBatis 基础设施 | [分层](references/architecture/layering.md)、[MyBatis](references/coding/mybatis.md)、[SQL](references/database/sql.md)；涉及 Java 类型同时加载 Java |
-| SQL 编写或优化 | [SQL](references/database/sql.md) |
-| 表、字段、索引、约束、数据库模型 | [数据库设计](references/database/database-design.md)、[SQL](references/database/sql.md)；涉及 Java 映射同时加载 MyBatis 和分层 |
-| @Transactional、传播、隔离级别、锁、查询后修改、一致性快照 | [事务](references/architecture/transactions.md) |
-| CompletableFuture、@Async、Executor、线程池、跨线程上下文 | [并发](references/architecture/concurrency.md)；涉及事务时同时加载事务 |
-| Bug 修复、行为变化、测试修改 | 对应领域规范与[测试](references/coding/testing.md) |
-| 认证、权限、数据范围、租户或敏感数据 | 目标项目已有安全规范及相关实现；本包无独立安全文档，不引用不存在的文件 |
+### Java 实现
 
-安全底线始终适用：不绕过认证、权限、数据权限或租户隔离，不硬编码或记录敏感凭证，不削弱现有安全机制。
+以下情况加载 [Java](references/coding/java.md)：
+
+```text
+命名
+类设计
+Lombok
+class / record
+方法
+Null / Optional
+集合 / 泛型
+BigDecimal / 时间
+catch / throw
+日志
+格式 / 注释
+```
+
+普通 Java 实现不因此自动加载分层、Spring 或 API。
+
+---
+
+### 分层、模型与 Package
+
+以下情况加载 [分层](references/architecture/layering.md)：
+
+```text
+新增或移动类
+判断 Controller / Service / Manager / Mapper / Client 职责
+Request / Query / DTO / BO / DO / VO 分类
+Package 归属
+跨模块调用
+入站 / 出站适配
+SOLID
+是否过度抽象
+```
+
+涉及模型 Java 实现时再同时加载 Java。
+
+---
+
+### Spring 框架
+
+以下情况加载 [Spring](references/coding/spring.md)：
+
+```text
+@RestController / @Controller
+Bean Validation / @Valid
+依赖注入
+Spring Bean 生命周期
+@ConfigurationProperties
+@Transactional / @Async / @Cacheable 的代理行为
+@RestControllerAdvice / @ExceptionHandler
+```
+
+Service / Manager 的业务职责本身属于分层规范，不因为类带 `@Service` 就必须同时加载 Spring。
+
+---
+
+### HTTP API
+
+以下情况加载 [API](references/api/api-design.md)：
+
+```text
+URL
+HTTP Method
+Path / Query / Body 契约
+Request / VO 对外语义
+ApiResponse<T> 或项目统一响应
+分页
+错误码 / HTTP Status
+幂等
+兼容性
+对外敏感字段
+```
+
+如果只是调整 Spring 注解而不改变 HTTP 契约，可以只加载 Spring。
+
+如果同时涉及模型职责或 Package，再加载分层；涉及 Java 实现细节再加载 Java。
+
+---
+
+### 异常与错误边界
+
+以下情况加载 [异常处理](references/architecture/error-handling.md)：
+
+```text
+Mapper / Client 异常如何传播
+Manager / Service 是否转换异常
+哪里记录完整异常现场
+重复 log + throw
+异常 cause
+Web / API 如何收口
+内部异常是否泄漏到客户端
+```
+
+按实际需要组合：
+
+```text
+catch / throw / 日志 API
+→ Java
+
+@RestControllerAdvice / @ExceptionHandler
+→ Spring
+
+错误码 / HTTP 错误响应
+→ API
+```
+
+不要把四份文档全部作为每个异常问题的默认组合。
+
+---
+
+### MyBatis
+
+以下情况加载 [MyBatis](references/coding/mybatis.md)：
+
+```text
+Mapper 接口
+Mapper XML
+@Param
+#{}/ ${}
+ResultMap
+TypeHandler
+Interceptor / Plugin
+动态 SQL
+MyBatis 技术 Package
+```
+
+如果实际修改 SQL，再同时加载 SQL；仅调整 ResultMap / TypeHandler 时不需要自动加载全部 SQL 规则。
+
+---
+
+### SQL / PostgreSQL
+
+编写、修改或优化实际 SQL 时加载：
+
+- [SQL](references/database/sql.md)
+
+SQL 规范负责：
+
+```text
+SELECT / JOIN
+WHERE / NULL / 时间范围
+INSERT / UPDATE / DELETE
+分页 / 排序
+N+1 / Batch
+PostgreSQL
+索引使用与 EXPLAIN
+```
+
+性能结论没有执行计划或真实证据时必须明确为结构性建议，而不是已验证结论。
+
+---
+
+### 数据库设计
+
+修改以下内容时加载：
+
+- [数据库设计](references/database/database-design.md)
+
+```text
+表
+字段
+类型
+Null / 默认值
+主键 / 唯一约束
+索引
+Migration
+数据库命名
+Schema 兼容
+```
+
+如果同时修改 SQL，再加载 SQL；如果同时修改 Java 映射，再加载 MyBatis。
+
+---
+
+### 事务
+
+涉及以下内容加载：
+
+- [事务](references/architecture/transactions.md)
+
+```text
+@Transactional 是否需要
+事务范围
+传播
+隔离级别
+查询后修改
+条件更新
+乐观锁 / 悲观锁
+一致性快照
+回滚
+```
+
+不要因为存在 Mapper 写操作就自动加载并引入事务设计。
+
+---
+
+### 并发
+
+涉及以下内容加载：
+
+- [并发](references/architecture/concurrency.md)
+
+```text
+CompletableFuture
+@Async
+Executor / ThreadPoolTaskExecutor
+线程池
+ThreadLocal / MDC / SecurityContext
+Lock / synchronized / volatile
+异步异常
+重试
+并发资源容量
+```
+
+如果并发逻辑涉及事务，再同时加载事务。
+
+---
+
+### 测试
+
+以下情况加载：
+
+- [测试](references/coding/testing.md)
+
+```text
+Bug 修复
+新增或修改业务行为
+新增测试
+测试失败
+SQL / 事务 / 并发的验证设计
+Mock / Testcontainers
+```
+
+测试规范决定“怎么验证”，不会替代对应领域规范决定“怎么实现”。
+
+---
+
+### 安全
+
+认证、权限、数据范围、租户和敏感数据优先读取目标项目已有安全规范、契约和实现。
+
+本 Skill Pack 当前没有独立 `security.md`。
+
+安全底线始终适用：
+
+* 不绕过认证、权限、数据权限或租户隔离；
+* 不硬编码或记录密码、Token、私钥等凭证；
+* 不削弱已有安全机制。
+
+---
+
+## 常见组合示例
+
+```text
+修改一个普通 Java 工具方法
+→ Java
+
+新增 PlaceVO
+→ 分层 + Java
+
+修改 Controller URL / 返回字段
+→ API + 必要的 Spring
+
+只给 Controller 增加 @Valid
+→ Spring
+
+新增 Mapper ResultMap
+→ MyBatis
+
+修改 Mapper 中实际 SELECT
+→ MyBatis + SQL
+
+修改表字段和映射
+→ 数据库设计 + MyBatis
+
+修复事务回滚问题
+→ 事务 + 必要的异常处理
+
+新增 CompletableFuture 数据库查询
+→ 并发 + 必要的事务
+
+修复 Bug 并补测试
+→ 对应领域 + 测试
+```
+
+原则：
+
+> 多领域取真正需要的并集，不以“保险”为理由加载全部规范。
+
+---
 
 ## 新建文件前的职责判断
 
-1. 先说明该类负责什么，搜索已有等价能力及同类组件所在位置。
-2. 按职责识别业务组件、Web 输入、查询条件、内部传输、业务中间模型、持久化模型、视图输出或框架基础设施。
-3. 新增模型先读取分层规范，判断 Request / Query / DTO / BO / DO / VO 及 Package；再读取 Java 规范确定 Lombok、`class` / `record` 等实现方式。不要统一塞进 dto，也不要为每一层机械创建模型或 Converter。
-4. 新增技术组件先按分层规范判断技术职责，再读取其领域规范确定具体 Package 和实现方式，不按当前使用者归属。
-5. 确认正确包名、命名和复用方式后再创建文件。
+1. 这个类实际负责什么？
+2. 是入站适配、业务用例、应用能力、数据库访问、外部技术适配、模型还是通用基础设施？
+3. 是否已经存在相同或类似能力？
+4. 如果是模型，属于 Request / Query / DTO / BO / DO / VO 中哪一种？
+5. Package 应由职责决定，而不是由当前任务目录决定。
+6. 确定职责和 Package 后，再读取对应实现规范并创建文件。
 
-使用规范中的具体判断及例外：
+重要默认：
 
-- 通用 MyBatis TypeHandler 属于 `common.mybatis.handler`，不因某个业务 Mapper 使用而放进业务 mapper 包。
-- 具体业务返回模型优先使用模块 `vo` 包中的 `*VO`；统一 HTTP 响应包装默认使用 `ApiResponse<T>`。如果目标项目已有其他统一响应类型、历史 API 或序列化契约，以项目现有约定为准，不得为了本 Skill 强制替换。也不因此无授权重命名已有公共 API。
-- 业务模型默认普通 class，使用 Lombok 生成无业务逻辑的访问器；模块明确统一使用 record 或任务明确要求时允许 record。不机械给所有字段添加 Setter。
-- 数据库拼音通过显式映射转换为 Java 英文属性；示例词汇需结合目标项目已有数据字典，不自行创造第二套术语。
-- 普通快照读不因多个 Mapper 就加事务；需要原子性或一致性快照时按事务规范判断。异步不得用于规避事务问题。
-- SOLID 用于识别真实职责、扩展、契约、接口和依赖问题，不用于机械创建 `Interface + Impl`、Strategy、Factory、Repository 包装或额外层级。
+- 通用 MyBatis TypeHandler 属于 MyBatis 技术基础设施，不因业务 Mapper 使用就放入业务 `mapper`。
+- 具体业务输出优先使用 `*VO`；统一 HTTP 响应默认推荐 `ApiResponse<T>`，但目标项目已有响应契约时以项目为准，不无授权迁移历史 API。
+- 普通业务模型默认使用普通 `class` 和项目现有 Lombok 风格；不为了减少样板代码主动换成 `record`。
+- 数据库物理命名与 Java 英文业务语义通过 Mapper / ResultMap 隔离。
+- Client / Adapter 负责第三方协议细节；Manager 只有在存在真实应用级复用、组合或原子能力时才引入。
+- SOLID 用于解决真实职责和依赖问题，不用于机械创建 `Interface + Impl`、Strategy、Factory、Repository 或额外层级。
+
+---
 
 ## 交付要求
 
-给出变更目的、实际行为、必要的文件定位及检查结果。区分已通过、失败和未执行的验证；报告仍存在的风险或业务待确认项，不将未执行的检查描述为通过。
+完成任务后给出：
+
+* 变更目的；
+* 关键行为；
+* 必要文件定位；
+* 实际执行的测试 / 静态检查 / 架构检查；
+* 失败或未执行项及原因；
+* 仍存在的业务待确认或真实风险。
+
+已通过且未受后续修改影响的检查无需机械重复运行。
+
+最终原则：
+
+> Skill 负责流程和路由，references 各自维护唯一领域知识；只加载当前任务真正需要的规范。
