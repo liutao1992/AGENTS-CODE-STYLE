@@ -268,14 +268,7 @@ PlaceStatsResponse
 place.response.*
 ```
 
-通用 HTTP 包装仍可使用项目已有：
-
-```text
-AjaxResult
-Result<T>
-ApiResponse<T>
-PageResponse<T>
-```
+通用 HTTP 响应包装应复用目标项目已有类型。本 Skill 不固定统一响应类名，也不使用具体项目的响应包装类型作为示例。
 
 禁止直接返回数据库 DO：
 
@@ -463,15 +456,9 @@ current
 pageNum
 ```
 
-如果项目已经存在统一分页返回结构，例如：
+如果项目已经存在统一分页返回结构，应直接复用。
 
-```text
-PageResponse<T>
-```
-
-应直接复用。
-
-`PageResponse<T>` 属于通用 HTTP 分页包装，不等同于具体业务 VO。
+分页包装属于通用 HTTP 响应结构，不等同于具体业务 VO。
 
 ---
 
@@ -615,23 +602,9 @@ API 与数据库之间允许存在转换。
 
 # 21. 统一响应结构
 
-如果项目已经存在：
+如果项目已经存在统一 HTTP 响应包装，应继续复用项目既有类型和契约。
 
-```text
-AjaxResult
-Result<T>
-ApiResponse<T>
-```
-
-应继续复用。
-
-禁止在单个模块重新定义另一套：
-
-```text
-ResponseResult
-CommonResponse
-ApiResult
-```
+本 Skill 不规定统一响应包装的类名，也不建议为了套用规范在单个模块重新创建另一套响应结构。
 
 统一 Response 属于项目级 HTTP 契约，与业务 VO 是两个不同概念：
 
@@ -640,7 +613,7 @@ ApiResult
 → VO
 
 HTTP 通用包装
-→ Response / Result
+→ 项目已有统一 Response
 ```
 
 ---
@@ -956,30 +929,23 @@ PlaceController
 
 # 36. Controller 示例
 
-推荐：
+命令类接口示例：
 
 ```java
 @PostMapping("/{id}/audit")
-public AjaxResult audit(
+public void audit(
         @PathVariable
         @NotBlank
         String id,
         @Valid @RequestBody PlaceAuditRequest request) {
 
     placeService.audit(id, request, currentOperator());
-    return AjaxResult.success();
 }
 ```
 
-查询类接口可以返回业务 VO 或项目统一响应包装后的 VO，例如：
+查询类接口可以直接返回业务 VO，也可以按照目标项目既有约定使用统一响应包装承载 VO。
 
-```text
-PlaceVO
-AjaxResult<PlaceVO>
-PageResponse<PlaceVO>
-```
-
-具体以项目已有统一接口风格为准。
+具体以项目已有接口风格为准，不在本 Skill 中固定统一响应包装类名。
 
 Controller 不承载数据库查询、状态判断、事务或复杂模型组装。
 
