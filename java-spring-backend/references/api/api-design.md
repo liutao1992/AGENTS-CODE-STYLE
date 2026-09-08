@@ -12,6 +12,10 @@
 
 > 没有明确需求时，优先保持已有接口兼容。
 
+模型职责与 Package 归属统一由应用分层规范定义：
+
+- [应用分层与模型边界](../architecture/layering.md)
+
 ---
 
 # 1. API 边界
@@ -175,6 +179,10 @@ Map<String, Object>
 
 如果一个 Request 同时承担多个完全不同接口的输入，应评估拆分。
 
+Request 的模型职责和 Package 归属读取：
+
+- [layering.md](../architecture/layering.md#91-request)
+
 ---
 
 # 7. Request 与数据库隔离
@@ -302,7 +310,11 @@ public PlaceDO detail(...) {
 
 模型分类与 Package 归属详细读取：
 
-- [java.md](../coding/java.md)
+- [layering.md](../architecture/layering.md#9-模型分类与-package-归属)
+
+Java 模型实现方式读取：
+
+- [java.md](../coding/java.md#3-模型对象的-java-实现)
 
 ---
 
@@ -442,6 +454,10 @@ Map<String, Object>
 承载普通业务查询条件。
 
 Query 的模型语义和 Package 归属读取：
+
+- [layering.md](../architecture/layering.md#92-query)
+
+Java 实现方式读取：
 
 - [java.md](../coding/java.md)
 
@@ -1016,16 +1032,17 @@ Controller 不承载数据库查询、状态判断、事务或复杂模型组装
 
 1. 项目是否已经存在类似接口。
 2. 目标项目是否已有统一响应包装；已有则复用，没有明确约定时默认使用 `ApiResponse<T>`。
-3. 是否能够复用已有 Request / VO。
-4. 具体业务输出是否正确使用 VO。
-5. URL 和 HTTP Method 是否符合现有约定。
-6. 是否会影响已有调用方。
-7. 是否改变已有字段语义。
-8. 是否需要参数校验。
-9. 是否需要权限校验。
-10. 是否存在幂等问题。
-11. 是否泄漏数据库或内部模型。
-12. 是否需要补充测试。
+3. 涉及 Request / Query / DTO / BO / DO / VO 或 Package 时，是否按 `layering.md` 确定职责与归属。
+4. 是否能够复用已有 Request / VO。
+5. 具体业务输出是否正确使用 VO。
+6. URL 和 HTTP Method 是否符合现有约定。
+7. 是否会影响已有调用方。
+8. 是否改变已有字段语义。
+9. 是否需要参数校验。
+10. 是否需要权限校验。
+11. 是否存在幂等问题。
+12. 是否泄漏数据库或内部模型。
+13. 是否需要补充测试。
 
 ---
 
@@ -1034,7 +1051,7 @@ Controller 不承载数据库查询、状态判断、事务或复杂模型组装
 完成 API 修改后检查：
 
 * Controller 是否直接调用 Mapper；
-* Request 是否职责明确；
+* Request / Query / DTO / BO / DO / VO 的职责和 Package 是否符合 `layering.md`；
 * 具体业务输出是否使用 VO；
 * 是否错误新增 `*Response` 作为具体业务视图模型；
 * 项目没有其他约定时，新接口是否默认使用 `ApiResponse<T>`；
@@ -1054,4 +1071,4 @@ Controller 不承载数据库查询、状态判断、事务或复杂模型组装
 
 最终原则：
 
-> API 表达稳定业务契约；Request 管输入，VO 管具体业务输出，统一 HTTP 响应默认使用 `ApiResponse<T>`，但目标项目已有约定时以项目为主；数据库和内部实现不得直接泄漏到接口边界。
+> API 表达稳定业务契约；模型职责与 Package 由分层规范统一定义；Request 管输入，VO 管具体业务输出，统一 HTTP 响应默认使用 `ApiResponse<T>`，但目标项目已有约定时以项目为主；数据库和内部实现不得直接泄漏到接口边界。
