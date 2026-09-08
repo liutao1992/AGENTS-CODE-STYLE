@@ -82,6 +82,91 @@ URL、HTTP Method、Request / VO、统一响应和兼容性统一读取：
 
 - [api-design.md](../api/api-design.md)
 
+### 1.1 路由注解位置遵循项目一致性
+
+本 Skill 不机械规定 `@RequestMapping` 只能放在方法上，也不机械要求必须放在类上。
+
+以下两种方式都可以是合理的：
+
+```java
+@RestController
+@RequestMapping("/places")
+public class PlaceController {
+
+    @GetMapping("/{id}")
+    public ApiResponse<PlaceVO> detail(@PathVariable String id) {
+        ...
+    }
+}
+```
+
+以及：
+
+```java
+@RestController
+public class PlaceController {
+
+    @GetMapping("/places/{id}")
+    public ApiResponse<PlaceVO> detail(@PathVariable String id) {
+        ...
+    }
+}
+```
+
+选择依据是：
+
+* 目标项目已有风格；
+* URL 是否容易搜索和定位；
+* 公共前缀是否真实稳定；
+* 是否会因为继承、组合或多级 Mapping 造成难以理解的最终路径。
+
+同一模块应保持合理一致，不为了个人偏好批量迁移已有 Controller。
+
+能够使用更具体的映射注解时，优先：
+
+```text
+@GetMapping
+@PostMapping
+@PutMapping
+@PatchMapping
+@DeleteMapping
+```
+
+而不是所有方法统一写宽泛的 `@RequestMapping` 再配置 method。
+
+URL 是否采用资源式 REST、业务动作路径或兼容历史接口属于 API 契约，统一由 `api-design.md` 判断；Spring 规范不强制一种 URL 流派。
+
+### 1.2 Controller 保持协议层简洁
+
+Controller 方法应以 Spring MVC 边界代码为主，例如：
+
+```text
+参数绑定
+Bean Validation
+获取当前请求调用者上下文
+调用 Service
+协议层响应包装
+```
+
+不在 Controller 中编写业务状态流转、复杂数据拼装、数据库访问或业务事务。
+
+当前用户、部门、租户等请求绑定上下文如果业务需要，应按 `layering.md` 的边界规则取得并显式传递；不要让 Service 为了获取当前请求用户反向依赖 Web 请求对象。
+
+### 1.3 OpenAPI / Swagger 文档遵循项目现有机制
+
+项目已经使用 OpenAPI / Swagger 注解或自动文档时，应同步维护真实接口描述、参数和返回契约。
+
+但本 Skill 不统一要求：
+
+```text
+每个 Controller 方法必须存在某个特定文档注解
+文档描述中必须填写作者姓名
+```
+
+作者和变更历史优先由 Git 记录；接口文档只保留对调用方有长期价值的契约信息。
+
+项目存在文档门禁、注解要求或代码生成约束时，以项目已有配置为准。
+
 ---
 
 ## 2. Bean Validation
@@ -451,6 +536,8 @@ Spring 侧重点只检查：
 
 不要因为方法执行 INSERT / UPDATE / DELETE 就机械添加 `@Transactional`。
 
+`rollbackFor` 应根据目标项目异常体系和真实回滚语义决定，不设置“所有事务必须统一写 `rollbackFor = Exception.class`”之类的通用硬规则。
+
 ---
 
 ## 8. `@Async` 与异步能力
@@ -572,30 +659,37 @@ AOP
 修改 Spring 代码时：
 
 1. 先按 `layering.md` 确认当前类真实职责。
-2. 查看当前模块已有 Spring 注解和依赖注入风格。
-3. Controller/API 契约读取 `api-design.md`，不在 Spring 规范重复推导。
+2. 查看当前模块已有 Spring 注解、路由注解位置和依赖注入风格。
+3. Controller/API 契约读取 `api-design.md`，不在 Spring 规范重复推导；不机械禁止类级 `@RequestMapping`，也不为了个人偏好迁移路由风格。
 4. 参数校验区分结构校验和业务校验；已有可信 Bean Validation 时不在 Service / Manager 机械重复同义校验。
 5. 检查必填字段是否被 `""`、`0`、默认编码或默认状态等无依据兜底掩盖。
 6. 多入口调用时确认真正缺失的是哪个入口校验或公共方法契约，不使用零散 `StringUtils` 判断代替边界设计。
-7. 新增 Bean 前确认确实需要 Spring 生命周期、依赖注入或代理能力。
-8. 使用 `@Transactional`、`@Async`、缓存等代理能力时检查实际代理边界。
-9. Web 异常优先复用统一 Advice / Handler，并读取 `error-handling.md`。
-10. 不硬编码环境配置和敏感凭证。
-11. 修改后执行目标项目已有相关测试和静态检查。
+7. Controller 是否只保留协议边界所需逻辑，当前请求调用者上下文是否按分层规则传递。
+8. OpenAPI / Swagger 是否沿用项目已有文档机制，不机械要求作者注解。
+9. 新增 Bean 前确认确实需要 Spring 生命周期、依赖注入或代理能力。
+10. 使用 `@Transactional`、`@Async`、缓存等代理能力时检查实际代理边界。
+11. Web 异常优先复用统一 Advice / Handler，并读取 `error-handling.md`。
+12. 不硬编码环境配置和敏感凭证。
+13. 修改后执行目标项目已有相关测试和静态检查。
 
 检查重点：
 
 * Controller 是否遵循项目已有 Spring MVC 风格；
+* 路由注解位置是否与模块保持一致，是否存在难以理解的多级 Mapping；
+* 是否机械规定只能 GET / POST 或机械反对项目已有 REST 风格；
 * `@Valid` / Bean Validation 是否用于结构性约束；
 * 已完成 Bean Validation 的字段是否又在业务层进行同义 `null` / blank / size 校验；
 * 是否通过 `StringUtils.hasText(...) ? value : defaultValue` 等方式掩盖本应拒绝的无效输入；
 * 是否把结构校验和业务校验混为一谈；
 * 多入口场景是否遗漏真正的入口校验；
+* Controller 是否包含业务逻辑、数据库访问或复杂业务数据拼装；
+* 是否让 Service / Manager 直接读取请求专用上下文；
 * 是否新增字段注入；
 * 是否自行 `new` Spring 管理组件；
 * 是否创建无必要 Spring Bean；
 * 是否硬编码环境配置；
 * `@Transactional` / `@Async` / `@Cacheable` 是否可能因自调用绕过代理；
+* 是否无依据强制所有事务设置统一 `rollbackFor`；
 * Web 异常是否重复在 Controller 手工处理；
 * Service / Manager 是否无必要依赖 HTTP 类型；
 * 是否为了 Spring 形式顺带改造无关代码。
