@@ -29,7 +29,7 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 | Java、模型、Package | [Java](../java-spring-backend/references/coding/java.md) | 职责与包归属，Request / Query / DTO / BO / DO / VO 分类，复用，模型风格及例外 |
 | Spring、Service、Controller | [Spring](../java-spring-backend/references/coding/spring.md)、[分层](../java-spring-backend/references/architecture/layering.md) | Controller 越层、HTTP 语义下沉、反向依赖、跨模块访问、无必要 Manager 或抽象 |
 | 架构与 SOLID | [分层](../java-spring-backend/references/architecture/layering.md) | SRP 职责混杂、OCP 真实扩展点、LSP 契约一致性、ISP 接口边界、DIP 对易变技术细节的耦合，以及是否以 SOLID 为理由过度抽象 |
-| API 与业务行为 | [API](../java-spring-backend/references/api/api-design.md)、[Java](../java-spring-backend/references/coding/java.md) | 未授权的 API 变化，字段语义、状态、默认值、校验与兼容行为，敏感字段暴露 |
+| API 与业务行为 | [API](../java-spring-backend/references/api/api-design.md)、[Java](../java-spring-backend/references/coding/java.md) | 未授权 API 变化，具体业务输出是否使用 VO，Response 是否只作为通用 HTTP 包装，字段语义、状态、默认值、校验与兼容行为，敏感字段暴露 |
 | MyBatis 与映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md)、[SQL](../java-spring-backend/references/database/sql.md) | Mapper 职责、TypeHandler 归属、显式映射、数据库拼音泄漏、参数绑定与动态 SQL 白名单 |
 | 数据库结构与 SQL | [数据库设计](../java-spring-backend/references/database/database-design.md)、[SQL](../java-spring-backend/references/database/sql.md) | 拼音术语复用、约束、数据完整性、注入、SELECT *、N+1、分页稳定性、写入条件 |
 | 事务、锁、一致性 | [事务](../java-spring-backend/references/architecture/transactions.md) | 不必要或缺失的事务边界、回滚、传播、自调用、查询后修改竞态 |
@@ -251,6 +251,8 @@ Repository + RepositoryImpl
 - 指出具体代码位置与适用规则或可复现的触发条件，说明实际影响；纯规范违规也应给出原文规则依据。
 - 核对明确例外：模块统一使用 record 或任务要求时不能按默认 class 规则报错；普通查询默认无显式事务，但一致性快照、锁或原子写入可能需要事务。
 - 新增通用 TypeHandler 错放业务 mapper 包、新增视图模型误用 DTO、HTTP 语义进入 Service 等，按对应领域规则判断；不要扩展为对历史代码的全仓库改造。
+- 新增具体业务输出模型时，如果无兼容性或项目既有风格例外，使用 `*Response` / `response` 包而不是 `*VO` / `vo` 包，可按模型与 API 规范形成发现；`AjaxResult`、`Result<T>`、`ApiResponse<T>`、`PageResponse<T>` 等通用 HTTP 包装不属于此问题。
+- 不得为了符合 VO 命名而要求无授权地重命名已经发布的历史 API 模型；兼容性优先。
 - SOLID 发现必须指出具体职责冲突、变化点、契约破坏、接口负担或技术耦合；不能只写“建议遵循 SOLID”“建议抽接口”之类泛化意见。
 - 不得因为某个类没有接口、没有 Strategy / Factory、没有 Repository 包装就认定违反 SOLID。
 - 如果新增接口、Strategy、Factory、Adapter、Repository 等抽象没有实际多实现、扩展、隔离或复用需求，也可以按“过度设计”形成有证据的维护性发现。
