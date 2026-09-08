@@ -35,17 +35,32 @@ Controller 只负责接口边界。
 * 调用 Service；
 * 返回项目统一响应。
 
-推荐：
+命令类接口默认示例：
 
 ```java
 @PostMapping("/{id}/audit")
-public void audit(
+public ApiResponse<Void> audit(
         @PathVariable String id,
         @Valid @RequestBody PlaceAuditRequest request) {
 
     placeService.audit(id, request, currentOperator());
+    return ApiResponse.success();
 }
 ```
+
+查询类接口默认示例：
+
+```java
+@GetMapping("/{id}")
+public ApiResponse<PlaceVO> detail(@PathVariable String id) {
+    PlaceVO place = placeService.getById(id);
+    return ApiResponse.success(place);
+}
+```
+
+这里的 `ApiResponse.success(...)` 仅用于表达统一响应包装的默认形式，具体静态方法、构造方式、字段结构和序列化契约以目标项目已有实现为准。
+
+如果目标项目已经存在其他统一响应类型或已发布 API，应继续沿用项目现有约定，不得为了套用本规范强制改成 `ApiResponse<T>`。
 
 禁止：
 
