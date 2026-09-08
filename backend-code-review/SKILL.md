@@ -301,7 +301,7 @@ Review 只需要确认：
 
 * 本次模型是否按真实职责分类；
 * Package 是否由职责而不是当前目录决定；
-* 具体业务输出是否无依据新增为 `*Response` / `response` 而不是项目约定的 VO；
+* 具体业务输出是否使用 VO，是否机械增加职责相同的额外输出模型；
 * DO 是否直接泄漏到 HTTP 边界；
 * 技术基础设施是否错误放入业务 Package；
 * 是否机械增加无真实职责的 DTO / BO / Converter / Assembler。
