@@ -1,52 +1,43 @@
 # MyBatis 编码规范
 
-本文档定义项目 MyBatis 使用规范。
+本文档定义 MyBatis 框架使用规范。
 
-数据库设计、命名、字段、索引及约束规则读取：
+本文负责回答：
 
-- [database-design.md](../database/database-design.md)
+> Mapper、Mapper XML、参数绑定、ResultMap、TypeHandler、动态 SQL 和 MyBatis 技术组件应该怎么组织和实现。
 
-PostgreSQL 与 SQL 编写规则读取：
+SQL 本身的正确性、安全范围、PostgreSQL 语义和性能统一读取：
 
-- [sql.md](../database/sql.md)
+- [SQL 与 PostgreSQL](../database/sql.md)
 
-事务规则读取：
+其他相关规范：
 
-- [transactions.md](../architecture/transactions.md)
+- [应用分层与模型边界](../architecture/layering.md)
+- [数据库设计](../database/database-design.md)
+- [事务](../architecture/transactions.md)
+- [Java 编码](java.md)
 
 核心原则：
 
-> Mapper 负责数据访问，不负责业务流程。
+> Mapper 负责数据访问接口和 MyBatis 映射，不负责业务流程。
 
-> 数据库使用拼音命名，Java 使用英文业务语义，通过 MyBatis 建立明确映射边界。
+> 数据库物理命名与 Java 业务命名通过 MyBatis 显式隔离。
 
-> MyBatis 通用技术基础设施统一放入 `common.mybatis`，不得因为被某个业务模块使用就放入该模块的 Mapper 包。
+> MyBatis 技术规则由本文维护，SQL 规则不在本文重复维护。
 
 ---
 
 ## 1. Mapper 职责
 
-Mapper 只负责数据库访问。
+Mapper 属于数据库出站适配边界。
 
-主要包括：
+主要负责：
 
-* SELECT；
-* INSERT；
-* UPDATE；
-* DELETE；
-* ResultMap；
+* 定义数据访问方法；
 * 参数映射；
-* 动态 SQL。
-
-Mapper 不负责：
-
-* HTTP 请求处理；
-* 权限业务判断；
-* 状态流转；
-* 业务流程编排；
-* 事务边界设计；
-* 第三方服务调用；
-* 与数据库访问无关的业务逻辑。
+* 结果映射；
+* 关联 Mapper XML；
+* 执行对应 SQL。
 
 例如：
 
@@ -60,26 +51,25 @@ public interface PlaceMapper {
     int insert(PlaceDO place);
 
     int update(PlaceDO place);
-
-    int deleteById(String id);
 }
 ```
 
-不要在 Mapper 中实现：
+Mapper 不负责：
 
-```text
-审核场所
-注册案件
-权限判断
-业务状态判断
-跨模块业务流程
-```
+* HTTP / RPC；
+* 权限业务判断；
+* 状态流转；
+* 完整业务流程；
+* 业务事务编排；
+* 第三方服务调用。
 
-这些逻辑应由 Service / Manager 负责。
+分层职责统一读取：
+
+- [layering.md](../architecture/layering.md)
 
 ---
 
-## 2. Mapper 包职责
+## 2. Mapper Package
 
 业务模块中的：
 
@@ -94,10 +84,9 @@ public interface PlaceMapper {
 ```text
 place.mapper.PlaceMapper
 case.mapper.CaseMapper
-equipment.mapper.EquipmentMapper
 ```
 
-不得因为某个技术类被 Mapper 使用，就将其放入业务模块的 `mapper` 包。
+不得因为一个技术类被 Mapper 使用，就把它放入业务 `mapper` Package。
 
 例如：
 
@@ -105,41 +94,17 @@ equipment.mapper.EquipmentMapper
 place.mapper.JsonStringListTypeHandler
 ```
 
-不符合职责归属。
-
-`JsonStringListTypeHandler` 表达的是：
-
-```text
-MyBatis TypeHandler
-```
-
-而不是：
-
-```text
-Place 数据访问 Mapper
-```
-
-因此应放入：
-
-```text
-common.mybatis.handler.JsonStringListTypeHandler
-```
+通常职责错误，因为 TypeHandler 是 MyBatis 技术基础设施，不是 Place Mapper。
 
 原则：
 
-> Package 根据类本身的职责确定，而不是根据哪个 Mapper 当前使用它确定。
+> Package 由组件自身职责决定，不由当前使用者决定。
 
 ---
 
-## 3. MyBatis 基础设施归属
+## 3. MyBatis 技术基础设施
 
-MyBatis 通用技术基础设施统一归入：
-
-```text
-common.mybatis
-```
-
-典型目录：
+通用 MyBatis 技术组件可以按目标项目已有结构归入：
 
 ```text
 common.mybatis.handler
@@ -148,46 +113,22 @@ common.mybatis.plugin
 common.mybatis.config
 ```
 
-对应关系：
+典型关系：
 
 ```text
-TypeHandler
-→ common.mybatis.handler
-
-Interceptor
-→ common.mybatis.interceptor
-
-Plugin
-→ common.mybatis.plugin
-
-公共 MyBatis 配置
-→ common.mybatis.config
+TypeHandler   → common.mybatis.handler
+Interceptor   → common.mybatis.interceptor
+Plugin        → common.mybatis.plugin
+Configuration → common.mybatis.config
 ```
 
-以下类型不得放入：
-
-```text
-place.mapper
-case.mapper
-equipment.mapper
-```
-
-等业务 Mapper 包：
-
-* TypeHandler；
-* Interceptor；
-* Plugin；
-* 通用 ResultHandler；
-* MyBatis 公共配置；
-* 与具体业务无关的数据访问基础设施。
-
-即使当前只有一个业务模块使用，也按类的实际技术职责确定归属。
+如果目标项目已有不同但职责清晰的公共 Package，应沿用项目结构，不为了本文重新创建第二套目录。
 
 ---
 
-## 4. 新增 MyBatis 组件前必须搜索
+## 4. 新增 MyBatis 组件前先搜索
 
-创建以下类型之前：
+新增以下类型前：
 
 ```text
 Mapper
@@ -198,92 +139,61 @@ ResultHandler
 MyBatis Configuration
 ```
 
-必须先搜索仓库，确认：
+必须先确认：
 
-1. 是否已经存在可复用实现；
-2. 是否存在相同职责的组件；
-3. 同类组件当前位于哪个 Package；
-4. 是否已经存在对应的 `common.mybatis` 基础设施目录；
+1. 是否已有相同或类似能力；
+2. 同类组件当前放在哪里；
+3. 是否可以直接复用；
+4. 当前组件属于业务 Mapper 还是通用技术基础设施；
 5. 是否真的需要新增。
 
-不得因为当前正在修改：
-
-```text
-place
-```
-
-模块，就默认创建：
-
-```text
-place.mapper.*
-```
-
-创建新文件应遵循：
+流程：
 
 ```text
 判断职责
-   ↓
-搜索同类实现
-   ↓
-确定 Package
-   ↓
-创建文件
+→ 搜索同类实现
+→ 确定 Package
+→ 创建或修改
 ```
 
 ---
 
 ## 5. Mapper 方法命名
 
-Mapper 方法名称应表达明确的数据访问目的。
+方法名应表达明确的数据访问意图。
 
-推荐：
+例如：
 
-```java
-getById(...)
-listByQuery(...)
-countByQuery(...)
-insert(...)
-update(...)
-deleteById(...)
-```
-
-可以根据具体查询目的使用：
-
-```java
-getByCode(...)
-listByStatus(...)
-countByCenterCode(...)
-existsByCode(...)
+```text
+getById
+getByCode
+listByQuery
+listByStatus
+countByQuery
+existsByCode
+insert
+update
+deleteById
 ```
 
 避免：
 
-```java
-handle(...)
-process(...)
-doQuery(...)
-executeBusiness(...)
+```text
+handle
+process
+doQuery
+executeBusiness
 ```
 
-Mapper 方法名称表达：
-
-> 查什么数据、按什么条件查。
-
-不要表达完整业务流程。
+Mapper 方法表达“访问什么数据、按什么条件访问”，不表达完整业务流程。
 
 ---
 
-## 6. 查询参数
+## 6. Mapper 参数
 
-参数较少时可以直接传递。
+单个或少量参数可以直接传递。
 
-例如：
-
-```java
-PlaceDO getById(String id);
-```
-
-多个简单参数需要明确名称时，可以使用：
+多个简单参数需要在 XML 中明确引用时，可以使用：
 
 ```java
 @Param
@@ -297,43 +207,27 @@ int updateStatus(
         @Param("status") String status);
 ```
 
-查询条件较多时，应封装为 Query 对象。
-
-例如：
-
-```java
-List<PlaceDO> listByQuery(PlaceQuery query);
-```
-
-当普通业务查询条件超过 3 个时，原则上应优先使用 Query 对象，避免方法参数持续膨胀。
-
-避免：
-
-```java
-List<PlaceDO> list(
-        String name,
-        String status,
-        String centerCode,
-        String type,
-        LocalDateTime startTime,
-        LocalDateTime endTime);
-```
-
-也避免使用：
+查询条件较多时优先使用 Query，而不是不断扩展参数列表或使用：
 
 ```java
 Map<String, Object>
 ```
 
-传递普通业务查询条件。
+Query 的职责和 Package 读取：
 
-Query 对象字段必须使用英文业务语义。
+- [layering.md](../architecture/layering.md#92-query)
+
+普通 Java 方法参数数量和 Query 使用阈值读取：
+
+- [java.md](java.md#51-控制参数数量)
+
+本文不重复维护第二套阈值。
 
 ---
 
-## 7. 参数绑定
+## 7. `#{}` 与 `${}`
 
-MyBatis 参数默认使用：
+普通数据参数使用：
 
 ```xml
 #{placeId}
@@ -345,91 +239,86 @@ MyBatis 参数默认使用：
 WHERE id = #{placeId}
 ```
 
-禁止将用户可控数据直接通过：
+`${}` 表示文本替换，不是普通数据参数绑定。
 
-```xml
-${placeId}
-```
-
-拼接进入 SQL。
-
-`${}` 只允许用于无法使用 PreparedStatement 参数化的 SQL 结构，例如：
+只有 SQL 结构无法通过 PreparedStatement 参数化时才可以评估 `${}`，例如：
 
 * 表名；
 * 字段名；
 * 排序字段；
-* 特殊 SQL 片段。
+* 固定 SQL 结构片段。
 
-并且必须满足：
+这类值必须先经过严格白名单映射：
 
 ```text
 用户输入
    ↓
-白名单映射
+白名单 / Enum 映射
    ↓
-SQL 结构
+固定 SQL 标识符
+   ↓
+${}
 ```
 
 禁止：
 
 ```text
-用户输入
-   ↓
-${}
-   ↓
-SQL
+用户输入 → ${} → SQL
 ```
 
-排序字段等场景优先由 Java 枚举或白名单转换为固定 SQL 字段。
+SQL 注入和排序等具体安全规则读取 `sql.md`。
 
 ---
 
-## 8. 数据库与 Java 映射
+## 8. 数据库与 Java 映射边界
 
-本项目数据库与 Java 使用不同命名体系。
+数据库物理字段和 Java 属性可以使用不同命名体系。
 
-数据库：
-
-```text
-拼音
-```
-
-Java：
+当前规范中：
 
 ```text
-英文业务语义
+Database
+→ 项目统一数据库命名
+
+Java
+→ 英文业务语义
 ```
 
-例如：
+例如项目数据库已有：
 
 ```text
-数据库              Java
-
-zjhm       →        identityNumber
-xm         →        name
-rqsj       →        entryTime
-lqsj       →        exitTime
-csbh       →        placeCode
-fzxbh      →        centerCode
+zjhm
+rqsj
+lqsj
+csbh
 ```
 
-MyBatis 是数据库与 Java 之间的重要防腐边界：
+Java 可以表达为：
 
 ```text
-Database（拼音）
-        ↓
-Mapper / ResultMap
-        ↓
-Java Model（英文）
+identityNumber
+entryTime
+exitTime
+placeCode
 ```
 
-禁止为了减少映射代码，让数据库拼音进入 Java 模型。
+MyBatis 通过 ResultMap、列别名、TypeHandler 等建立映射边界。
+
+不要为了减少映射代码让数据库物理命名直接扩散到 Java 业务模型。
+
+数据库命名详细规则读取：
+
+- [database-design.md](../database/database-design.md)
+
+DO 的模型职责读取：
+
+- [layering.md](../architecture/layering.md#95-do)
 
 ---
 
 ## 9. ResultMap
 
-数据库字段与 Java 属性名称不一致时，应优先使用显式 `resultMap`。
+数据库列与 Java 属性名称或类型不一致时，优先使用清晰的显式映射。
 
 例如：
 
@@ -443,14 +332,7 @@ Java Model（英文）
 </resultMap>
 ```
 
-推荐显式定义：
-
-* 主键；
-* 普通字段；
-* 特殊类型；
-* TypeHandler。
-
-例如：
+对于特殊类型可以显式指定 TypeHandler：
 
 ```xml
 <result
@@ -459,151 +341,51 @@ Java Model（英文）
     typeHandler="com.example.common.mybatis.handler.JsonStringListTypeHandler"/>
 ```
 
-不要因为可以使用自动映射，就让数据库命名影响 Java 属性设计。
+映射应让读者能够判断：
+
+```text
+数据库列
+→ Java 属性
+→ 特殊类型转换
+```
+
+不要为了使用自动映射反向修改 Java 业务命名。
 
 ---
 
-## 10. DO
+## 10. TypeHandler
 
-DO 表达数据库持久化数据。
+TypeHandler 负责数据库类型与 Java 类型之间的**技术转换**。
 
-数据库：
-
-```text
-ryxx
-zjhm
-rqsj
-```
-
-Java：
+常见：
 
 ```text
-PersonDO
-identityNumber
-entryTime
+JSON / JSONB ↔ Java Collection / Object
+数据库编码 ↔ Java Enum
+数据库特殊类型 ↔ Java 类型
 ```
 
-DO 不要求机械复制数据库表名或字段名。
+TypeHandler 不负责：
 
-例如：
-
-```text
-数据库表：ryxx
-
-Java：
-PersonDO
-```
-
-而不是为了与表名一致创建：
-
-```text
-RyxxDO
-```
+* 查询业务数据；
+* 调用 Service / Manager；
+* 权限判断；
+* 业务状态判断；
+* 完整业务异常处理。
 
 原则：
 
-> DO 表达持久化数据职责，但仍属于 Java 命名体系。
+> TypeHandler 做类型转换，不做业务流程。
+
+新增通用 TypeHandler 前必须先搜索项目是否已有等价实现。
 
 ---
 
-## 11. TypeHandler
+## 11. 动态 SQL
 
-TypeHandler 用于数据库类型与 Java 类型之间的技术转换。
-
-例如：
+MyBatis 动态 SQL 可以合理使用：
 
 ```text
-JSON / JSONB
-    ↓
-List<String>
-
-数据库编码
-    ↓
-Java Enum
-
-特殊数据库类型
-    ↓
-Java 类型
-```
-
-TypeHandler 不负责业务判断。
-
-禁止在 TypeHandler 中：
-
-* 查询业务数据；
-* 调用 Service；
-* 调用业务 Manager；
-* 执行业务状态判断；
-* 实现权限逻辑。
-
-TypeHandler 应保持：
-
-```text
-输入数据库值
-      ↓
-类型转换
-      ↓
-Java 值
-```
-
-以及反方向转换。
-
-通用 TypeHandler 统一放入：
-
-```text
-common.mybatis.handler
-```
-
-例如：
-
-```text
-common.mybatis.handler.JsonStringListTypeHandler
-```
-
----
-
-## 12. SELECT
-
-原则上不要使用：
-
-```sql
-SELECT *
-```
-
-应明确查询字段。
-
-例如：
-
-```sql
-SELECT
-    id,
-    xm,
-    zjhm,
-    rqsj,
-    lqsj
-FROM ryxx
-WHERE id = #{id}
-```
-
-原因：
-
-* 减少无关字段读取；
-* 防止新增字段影响现有映射；
-* ResultMap 更明确；
-* 数据库与 Java 边界更稳定；
-* 更容易检查实际返回内容。
-
-详细 SQL 规则读取：
-
-- [sql.md](../database/sql.md)
-
----
-
-## 13. 动态 SQL
-
-复杂查询条件可以使用 MyBatis：
-
-```xml
 <if>
 <choose>
 <when>
@@ -621,25 +403,19 @@ WHERE id = #{id}
     <if test="placeName != null and placeName != ''">
         AND csmc LIKE CONCAT('%', #{placeName}, '%')
     </if>
-
     <if test="status != null">
         AND zt = #{status}
     </if>
 </where>
 ```
 
-动态 SQL 应保持：
+动态 SQL 负责 SQL 结构选择，不应承载完整业务流程或复杂业务状态机。
 
-* 结构清晰；
-* 条件明确；
-* 可直接阅读；
-* 不隐藏业务流程。
-
-不要把大量业务判断塞入 Mapper XML。
+SQL 条件本身是否正确、安全、高效由 `sql.md` 判断。
 
 ---
 
-## 14. SQL 片段复用
+## 12. SQL 片段复用
 
 可以使用：
 
@@ -648,382 +424,102 @@ WHERE id = #{id}
 <include>
 ```
 
-复用稳定、明确的 SQL 片段。
+复用稳定且明确的 SQL 片段。
 
-例如：
-
-```xml
-<sql id="BaseColumns">
-    id,
-    xm,
-    zjhm,
-    rqsj,
-    lqsj
-</sql>
-```
-
-但是不要为了减少几行代码创建层层嵌套、难以追踪的 SQL 片段。
-
-原则：
+不要为了减少几行代码创建层层嵌套、难以追踪的 `<sql>` 片段。
 
 > SQL 可读性优先于形式上的复用。
 
 ---
 
-## 15. N+1 查询
-
-禁止无意识地在循环中不断执行 Mapper 查询：
-
-```java
-for (PlaceDO place : places) {
-    equipmentMapper.listByPlaceId(place.getId());
-}
-```
-
-发现 N+1 时，应先评估是否可以：
-
-* 批量查询；
-* JOIN；
-* `IN`；
-* 一次性查询后在内存分组；
-* 改变查询模型。
-
-例如：
-
-```text
-100 条 Place
-    ↓
-100 次 Equipment 查询
-```
-
-应优先评估：
-
-```text
-100 个 placeId
-    ↓
-一次批量查询
-    ↓
-Java 分组
-```
-
-但也不要为了避免 N+1 构造无限增长的巨大 `IN`。
-
----
-
-## 16. INSERT
-
-INSERT 应明确字段。
-
-推荐：
-
-```sql
-INSERT INTO ryxx (
-    id,
-    xm,
-    zjhm,
-    rqsj
-)
-VALUES (
-    #{id},
-    #{name},
-    #{identityNumber},
-    #{entryTime}
-)
-```
-
-不要依赖数据库字段顺序。
-
-需要数据库默认值时，应明确确认该字段是否应该由数据库生成。
-
----
-
-## 17. UPDATE
-
-UPDATE 必须具有明确的 `WHERE` 条件。
-
-例如：
-
-```sql
-UPDATE csxx
-SET
-    zt = #{targetStatus},
-    gxsj = #{updateTime}
-WHERE id = #{id}
-```
-
-对于状态流转，优先考虑条件更新：
-
-```sql
-UPDATE csxx
-SET zt = #{targetStatus}
-WHERE id = #{id}
-  AND zt = #{expectedStatus}
-```
-
-并根据业务需要检查受影响行数：
-
-```java
-int affectedRows;
-```
-
-如果：
-
-```text
-affectedRows == 0
-```
-
-应由上层判断是：
-
-* 数据不存在；
-* 状态已变化；
-* 并发冲突；
-
-而不是由 Mapper 编排完整业务逻辑。
-
----
-
-## 18. DELETE
-
-执行 DELETE 前必须明确：
-
-* 删除范围；
-* 是否物理删除；
-* 是否逻辑删除；
-* 是否存在关联数据；
-* 是否符合项目已有删除语义。
-
-不得因为当前实现方便，自行将：
-
-```text
-物理删除
-```
-
-改为：
-
-```text
-逻辑删除
-```
-
-或者反过来。
-
-DELETE 必须具有明确条件。
-
----
-
-## 19. 批量操作
-
-大量数据操作应优先考虑合理批处理。
-
-避免：
-
-```java
-for (...) {
-    mapper.insert(...);
-}
-```
-
-无边界逐条访问数据库。
-
-可以根据实际情况使用：
-
-* MyBatis Batch；
-* PostgreSQL 多 Values；
-* 分批处理；
-* 其他项目已有批处理方式。
-
-同时避免一次生成过大的：
-
-```text
-IN (...)
-VALUES (...)
-```
-
-批量大小应结合：
-
-* 数据量；
-* SQL 长度；
-* 内存；
-* 事务范围；
-* PostgreSQL 承载能力。
-
-不得凭经验随意设置极大批次。
-
----
-
-## 20. 分页
-
-分页查询必须具有稳定排序。
-
-例如：
-
-```sql
-ORDER BY cjsj DESC, id DESC
-LIMIT #{pageSize}
-OFFSET #{offset}
-```
-
-禁止分页但没有：
-
-```sql
-ORDER BY
-```
-
-对于大数据量深分页，应评估 Keyset Pagination。
-
-详细分页和 PostgreSQL SQL 规则读取：
-
-- [sql.md](../database/sql.md)
-
----
-
-## 21. Mapper XML
+## 13. Mapper XML
 
 Mapper XML 应保持：
 
-* SQL 清晰；
-* 缩进一致；
-* 字段明确；
-* 条件明确；
+* namespace 清晰；
+* SQL 与 Mapper 方法容易对应；
+* 参数名称清楚；
 * ResultMap 明确；
-* 动态 SQL 易读。
+* 动态 SQL 可读；
+* TypeHandler 使用明确。
 
-XML 中不要包含：
+XML 不应包含：
 
-* 复杂业务流程；
+* 完整业务流程；
 * 权限业务编排；
-* 与 SQL 无关的大量判断。
+* 与数据库访问无关的大量判断。
 
-Mapper XML 应让开发者能够较快判断：
-
-```text
-查什么
-从哪里查
-按什么条件查
-返回什么
-```
-
----
-
-## 22. Mapper 与事务
-
-Mapper 负责执行数据库操作，不负责定义完整业务事务边界。
-
-不要因为 Mapper 方法执行：
-
-```text
-INSERT
-UPDATE
-DELETE
-```
-
-就机械在 Mapper 层增加业务事务。
-
-事务应根据数据一致性范围由 Manager / Service 等合适边界管理。
-
-普通快照查询也不因为经过 Mapper 就自动需要显式事务。
-
-涉及事务时读取：
-
-- [transactions.md](../architecture/transactions.md)
-
----
-
-## 23. SQL 性能
-
-不要仅凭代码结构判断：
-
-```text
-这个 SQL 一定更快
-这个写法一定走索引
-这个 JOIN 一定比子查询快
-```
-
-复杂或性能敏感 SQL 应结合：
-
-```text
-EXPLAIN
-EXPLAIN ANALYZE
-```
-
-以及：
-
-* 数据量；
-* 索引；
-* 查询选择性；
-* 返回行数；
-
-进行判断。
-
-SQL 性能规范统一读取：
+具体 SQL 格式、SELECT、JOIN、写入范围、分页和性能统一读取：
 
 - [sql.md](../database/sql.md)
 
-MyBatis 规范不重复维护 PostgreSQL 的具体优化细节。
+---
+
+## 14. Mapper 与事务
+
+Mapper 执行数据库操作，但不负责定义完整业务事务边界。
+
+不要因为 Mapper 中存在 INSERT / UPDATE / DELETE 就机械在 Mapper 层增加业务事务。
+
+事务统一读取：
+
+- [transactions.md](../architecture/transactions.md)
+
+本文只要求 Mapper 不自行编排跨业务操作的事务语义。
 
 ---
 
-## 24. Codex 修改流程
+## 15. SQL 规则不在 MyBatis 规范重复维护
 
-修改 MyBatis 相关代码时：
+以下内容统一由 `sql.md` 维护：
 
-1. 判断当前任务涉及 Mapper、XML 还是 MyBatis 基础设施。
-2. 按需读取 `mybatis.md` 和 `sql.md`。
-3. 搜索当前模块已有 Mapper 和 XML。
-4. 找到至少一个类似实现。
-5. 新增技术组件时先判断其 Package 职责。
-6. 检查数据库拼音与 Java 英文之间的映射。
-7. 检查参数绑定方式。
-8. 检查 SQL 范围和安全性。
-9. 检查是否存在 N+1 或明显重复数据库访问。
-10. 修改完成后检查完整 Mapper / XML 调用链。
-11. 执行相关测试。
+```text
+SELECT *
+COUNT / NULL
+JOIN / LEFT JOIN
+WHERE / 时间范围
+INSERT / UPDATE / DELETE
+分页 / 排序
+EXISTS / IN
+N+1
+Batch
+PostgreSQL 语法
+索引与 EXPLAIN
+SQL 性能
+```
+
+MyBatis 任务如果修改了 SQL，应同时加载 `sql.md`；如果只调整 ResultMap、TypeHandler 或参数映射，不需要为了形式加载全部 SQL 规范。
 
 ---
 
-## 25. Codex 检查
+## 16. Codex MyBatis 修改流程
 
-修改 MyBatis 代码后检查：
+修改 MyBatis 代码时：
 
-### 职责
+1. 判断是 Mapper 接口、Mapper XML、ResultMap、TypeHandler 还是其他 MyBatis 基础设施。
+2. 搜索当前项目已有类似实现。
+3. 新增组件前按职责确定 Package。
+4. 检查参数是否应使用 `#{}`，`${}` 是否确实属于结构并经过白名单。
+5. 检查数据库列与 Java 属性的映射是否明确。
+6. 检查 TypeHandler 是否只承担技术转换。
+7. 动态 SQL 是否清晰且没有隐藏业务流程。
+8. 修改 SQL 时同时读取 `sql.md`。
+9. 涉及事务时读取 `transactions.md`。
+10. 执行目标项目已有相关测试。
+
+检查重点：
 
 * Mapper 是否只负责数据访问；
-* Mapper 是否出现业务流程；
-* MyBatis 技术基础设施是否错误放入业务 Mapper 包；
-* TypeHandler 是否位于 `common.mybatis.handler`；
-* 新增文件是否根据职责确定 Package。
-
-### 映射
-
-* 数据库拼音是否泄漏到 Java；
-* Java DO 是否保持英文业务语义；
-* 是否应该使用显式 ResultMap；
-* 特殊类型是否使用合适 TypeHandler。
-
-### 参数与安全
-
-* 是否直接使用 `${}` 接收用户输入；
-* `${}` 是否经过严格白名单；
-* 查询条件较多时是否应该封装 Query；
-* 是否无意义使用 `Map<String, Object>`。
-
-### SQL
-
-* 是否存在 `SELECT *`；
-* INSERT 是否明确字段；
-* UPDATE / DELETE 是否具有明确条件；
-* 状态更新是否需要条件 UPDATE；
-* 分页是否具有稳定排序；
-* 是否存在无意识 N+1；
-* 是否存在过大的 `IN` / Batch；
-* SQL 是否符合 PostgreSQL 规范。
-
-### 架构
-
-* Mapper 是否承担事务编排；
-* 是否因为当前模块使用某个技术类，就错误将其放入当前模块；
-* 是否重复创建已有 MyBatis 公共能力。
+* MyBatis 技术组件是否错误放入业务 Mapper Package；
+* 是否重复创建已有 TypeHandler / Interceptor / Plugin；
+* Query / DO 的职责和 Package 是否符合 `layering.md`；
+* 是否把数据库物理命名无必要泄漏到 Java；
+* ResultMap 是否清楚表达列与属性映射；
+* `${}` 是否直接接收用户输入；
+* TypeHandler 是否混入业务逻辑；
+* Mapper XML 是否隐藏复杂业务流程；
+* 是否在本文范围内重复发明 SQL 或事务规则。
 
 最终原则：
 
-> Mapper 管数据访问，ResultMap 管数据库与 Java 的映射，TypeHandler 管类型转换；业务逻辑留在业务层，通用 MyBatis 基础设施归入 `common.mybatis`。
-
+> MyBatis 规范负责“Java 与 SQL 如何连接和映射”；SQL 规范负责“SQL 本身是否正确、安全、清晰和高效”。
