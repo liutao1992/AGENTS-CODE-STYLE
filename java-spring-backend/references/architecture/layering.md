@@ -7,8 +7,17 @@
 * 明确各层职责；
 * 控制跨层依赖；
 * 避免业务逻辑散落；
-* 隔离数据库模型与业务模型；
-* 避免过度设计。
+* 使用 SOLID 辅助判断职责、依赖和扩展边界；
+* 避免为了架构形式增加无意义层级和抽象。
+
+模型分类、数据库映射、事务和并发分别由对应专项规范维护，本文不重复展开。
+
+相关规范：
+
+- [Java 模型与编码](../coding/java.md)
+- [MyBatis](../coding/mybatis.md)
+- [事务](transactions.md)
+- [并发](concurrency.md)
 
 ---
 
@@ -31,11 +40,11 @@ Controller / Web
 简单理解：
 
 ```text
-Controller   管接口
-Service      管业务
+Controller   管接口边界
+Service      管业务用例和业务流程
 Manager      管复用、适配和原子数据操作
 Mapper       管数据访问
-Database     管存储
+Database     管数据存储
 ```
 
 原则：
@@ -46,21 +55,21 @@ Manager 为可选层，不得为了分层形式机械创建。
 
 ---
 
-## 1.1 SOLID 设计原则
+# 2. SOLID 设计原则
 
 分层之外，类、接口和模块设计应参考 SOLID 原则。
 
-SOLID 用于帮助判断职责、依赖和扩展边界，不用于机械增加接口、实现类或设计模式。
+SOLID 用于帮助判断职责、依赖和扩展边界，不用于机械增加接口、实现类、设计模式或中间层。
 
 核心原则：
 
-> 先保持职责清晰和依赖合理；只有真实变化和扩展需求出现时，再增加必要抽象。
+> 先保持职责清晰和依赖合理；只有真实变化、替换、隔离或扩展需求出现时，再增加必要抽象。
 
-### S — Single Responsibility Principle（单一职责原则）
+## 2.1 S — Single Responsibility Principle（单一职责原则）
 
 一个类、接口或模块应围绕一个明确职责设计，并尽量只有一个主要变化原因。
 
-在本项目分层中：
+在当前分层中：
 
 ```text
 Controller
@@ -96,21 +105,25 @@ Mapper
 
 只有职责确实独立、复杂或需要复用时才拆分。
 
+原则：
+
+> 按变化原因和职责边界拆分，不按代码行数或方法数量机械拆分。
+
 ---
 
-### O — Open/Closed Principle（开闭原则）
+## 2.2 O — Open/Closed Principle（开闭原则）
 
-对已有稳定逻辑，应优先通过明确扩展点支持新的变化，而不是不断修改核心流程中的大量条件判断。
+当代码已经存在明确、稳定、持续增加的变化方向时，应优先通过清晰扩展点支持变化，而不是不断扩大核心流程中的条件分支。
 
-当业务已经存在多个稳定变化方向时，可以考虑：
+可能的扩展方式包括：
 
 * Strategy；
 * Handler；
 * Factory；
 * 模板方法；
-* Spring Bean 集合等扩展方式。
+* Spring Bean 集合。
 
-例如，当不同场所类型确实存在多套稳定审核规则时，可以评估：
+例如，不同业务类型确实存在多套稳定审核规则时，可以评估：
 
 ```text
 PlaceAuditService
@@ -129,7 +142,7 @@ AbstractFactory
 大量接口
 ```
 
-如果当前只有一个明确实现，简单条件逻辑能够清晰解决问题，应保持简单。
+如果当前只有一个实现，或者少量简单条件能够清晰表达业务，应保持简单。
 
 原则：
 
@@ -137,11 +150,11 @@ AbstractFactory
 
 ---
 
-### L — Liskov Substitution Principle（里氏替换原则）
+## 2.3 L — Liskov Substitution Principle（里氏替换原则）
 
-实现类替换其抽象类型时，不得破坏原有调用方对行为的合理预期。
+实现类替换其抽象类型时，不得破坏调用方对原有契约的合理预期。
 
-实现接口或继承父类时，应保持契约一致，包括：
+实现接口或继承父类时，应保持：
 
 * 输入语义；
 * 返回语义；
@@ -150,7 +163,7 @@ AbstractFactory
 * 副作用；
 * Null 约定。
 
-禁止为了复用继承关系而出现：
+例如，如果某实现对抽象类型核心方法只能：
 
 ```java
 @Override
@@ -159,32 +172,23 @@ public void audit(...) {
 }
 ```
 
-如果某个实现无法满足父类型的核心契约，应重新判断抽象是否合理，而不是通过特殊判断修补错误继承关系。
+应重新判断抽象关系是否合理，而不是通过特殊判断修补错误继承关系。
 
 ---
 
-### I — Interface Segregation Principle（接口隔离原则）
+## 2.4 I — Interface Segregation Principle（接口隔离原则）
 
-接口应围绕明确使用场景设计，避免形成所有调用方都依赖的巨大接口。
+接口应围绕明确使用场景设计，避免让调用方或实现方依赖大量无关能力。
 
-例如跨模块提供能力时，应避免：
+如果一个跨模块 Facade / SPI 同时包含大量互不相关能力，并导致调用方只使用很小一部分或实现方被迫实现无意义方法，应考虑按真实边界拆分。
 
-```java
-public interface PlaceService {
-    // 查询
-    // 创建
-    // 审核
-    // 统计
-    // 文件处理
-    // 缓存管理
-    // 内部维护操作
-    // ...
-}
+但不要因为：
+
+```text
+接口方法稍多
 ```
 
-如果不同调用方只需要其中少量且稳定的能力，可以根据真实边界拆分更聚焦的 Facade / 接口。
-
-但不要因为接口方法稍多就机械拆成大量小接口。
+就机械拆成大量小接口。
 
 原则：
 
@@ -192,29 +196,20 @@ public interface PlaceService {
 
 ---
 
-### D — Dependency Inversion Principle（依赖倒置原则）
+## 2.5 D — Dependency Inversion Principle（依赖倒置原则）
 
-高层业务流程不应直接依赖容易变化的底层技术细节。
+高层业务流程不应直接耦合容易变化的底层技术细节。
 
-例如：
-
-```text
-Service
-   ↓
-稳定业务能力 / 抽象
-   ↓
-第三方 SDK、HTTP 客户端、具体技术实现
-```
-
-对于：
+重点关注：
 
 * 第三方系统；
-* 外部存储；
+* 外部 HTTP 服务；
+* 对象存储；
 * 消息系统；
 * 可替换算法；
-* 多实现技术能力；
+* 多供应商实现。
 
-如果存在真实替换、隔离或测试需求，可以通过接口或适配层隔离具体实现。
+如果存在真实替换、隔离或测试需求，可以通过接口或适配边界隔离具体实现。
 
 例如：
 
@@ -226,7 +221,7 @@ FaceRecognitionClient
 VendorFaceRecognitionClient
 ```
 
-而不是让业务 Service 到处直接调用第三方 SDK。
+而不是让业务 Service 到处理解第三方 SDK 的对象、异常和调用协议。
 
 但依赖倒置不意味着所有类都必须采用：
 
@@ -238,13 +233,13 @@ XxxServiceImpl
 
 如果只有一个稳定实现，也不存在替换、隔离或多实现需求，不得为了符合 SOLID 机械创建接口和实现类。
 
-本项目中的 Mapper 本身通常已经通过接口形成数据访问边界，也不需要额外包装 Repository / RepositoryImpl 才算满足 DIP。
+本项目 Mapper 通常已经通过接口形成数据访问边界，不需要仅为了 DIP 再包装无实际价值的 Repository / RepositoryImpl。
 
 ---
 
-### SOLID 与简单设计的关系
+## 2.6 SOLID 与简单设计
 
-SOLID 是设计判断原则，不是代码结构模板。
+SOLID 是设计判断原则，不是固定代码模板。
 
 禁止以下机械推导：
 
@@ -263,34 +258,34 @@ SOLID
 正确判断方式：
 
 ```text
-当前职责是否混乱？
+职责是否真实混乱？
         ↓ 是
-考虑 SRP 拆分
+考虑 SRP
 
-是否存在真实且稳定的变化点？
+是否存在真实且稳定的变化方向？
         ↓ 是
-考虑 OCP 扩展
+考虑 OCP
 
-抽象实现是否保持一致契约？
-        ↓ 否
+实现是否破坏已有抽象契约？
+        ↓ 是
 检查 LSP
 
-接口是否迫使调用方依赖无关能力？
+调用方或实现方是否被迫依赖无关能力？
         ↓ 是
 考虑 ISP
 
 高层业务是否直接耦合易变技术细节？
         ↓ 是
-考虑 DIP 隔离
+考虑 DIP
 ```
 
 最终原则：
 
-> SOLID 用来降低真实复杂度，不用来制造新的复杂度。
+> SOLID 用来降低真实复杂度，也用来识别错误抽象；不用来制造新的复杂度。
 
 ---
 
-# 2. Controller / Web 层
+# 3. Controller / Web 层
 
 Controller 负责系统接口边界。
 
@@ -301,7 +296,7 @@ Controller 负责系统接口边界。
 * 基础参数校验；
 * 获取当前用户等请求上下文；
 * 调用 Service；
-* 返回统一响应。
+* 返回项目统一响应。
 
 禁止：
 
@@ -324,21 +319,26 @@ public AjaxResult audit(
 }
 ```
 
+原则：
+
+> Controller 保持轻量，只表达 HTTP 接口边界。
+
 ---
 
-# 3. Service 层
+# 4. Service 层
 
-Service 负责具体业务逻辑和业务流程编排。
+Service 负责业务用例和业务流程编排。
 
 主要职责：
 
 * 实现业务用例；
 * 执行业务校验；
 * 编排多个 Manager；
-* 调用 Manager 或 Mapper；
-* 组织业务输入和输出。
+* 简单场景下直接调用 Mapper；
+* 组织业务输入和输出；
+* 协调多个业务能力。
 
-方法名称应表达明确的业务行为。
+方法名称应表达明确业务行为。
 
 推荐：
 
@@ -360,25 +360,29 @@ doSomething(...)
 
 Service 不负责：
 
-* HTTP 处理；
+* HTTP 状态和响应协议；
 * SQL；
 * 数据库字段映射；
 * 第三方协议细节。
 
+原则：
+
+> Service 表达业务流程，不成为 HTTP、SQL 和技术细节的混合层。
+
 ---
 
-# 4. Manager 层
+# 5. Manager 层
 
-Manager 为可选的通用业务处理层。
+Manager 为可选层。
 
 适用于：
 
 * 多个 Mapper / DAO 的组合操作；
 * 多表一致性修改；
-* 可复用的数据处理；
+* 可复用的数据操作；
 * 公共查询能力；
 * 第三方服务适配；
-* 缓存等基础能力封装；
+* 缓存等技术能力封装；
 * 需要独立事务保证的原子数据操作。
 
 例如：
@@ -403,11 +407,11 @@ Mapper
 
 原则：
 
-> 有复用、一致性或技术隔离需求时再引入 Manager。
+> 有真实复用、一致性或技术隔离需求时再引入 Manager。
 
 ---
 
-# 5. Mapper / DAO 层
+# 6. Mapper / DAO 层
 
 Mapper / DAO 负责数据库访问。
 
@@ -435,17 +439,21 @@ int update(PlaceDO place);
 
 Mapper 不负责：
 
-* 权限判断；
+* 权限业务判断；
 * 业务状态流转；
 * 复杂业务决策；
 * HTTP 处理；
 * 业务事务编排。
 
+MyBatis 基础设施、数据库与 Java 映射等详细规则读取：
+
+- [mybatis.md](../coding/mybatis.md)
+
 ---
 
-# 6. 分层调用规则
+# 7. 分层调用与依赖规则
 
-允许：
+简单业务允许：
 
 ```text
 Controller
@@ -455,7 +463,7 @@ Service
 Mapper
 ```
 
-复杂场景：
+需要真实复用、一致性操作或技术适配时：
 
 ```text
 Controller
@@ -475,14 +483,24 @@ Mapper     → Service
 Manager    → Controller
 ```
 
-跨业务模块时，优先调用对方提供的 Service / Facade。
+也禁止为了减少代码直接从业务层绕过已有边界访问底层实现。
+
+原则：
+
+> 依赖方向保持单向，职责边界比调用方便更重要。
+
+---
+
+# 8. 跨模块调用
+
+跨业务模块时，优先调用目标模块提供的 Service / Facade。
 
 推荐：
 
 ```text
 CaseService
     ↓
-PlaceService
+PlaceService / PlaceFacade
 ```
 
 避免：
@@ -493,344 +511,68 @@ CaseService
 PlaceMapper
 ```
 
----
+原因：
 
-# 7. 领域模型
+* 直接访问其他模块 Mapper 会绕过其业务规则；
+* 调用方会耦合目标模块数据库实现；
+* 数据访问边界和权限边界容易被破坏。
 
-领域模型命名参考阿里巴巴 Java 开发规范：
+但不要为了形式机械创建 Facade。
 
-```text
-DO
-DTO
-BO
-Query
-VO
-```
-
-## DO
-
-数据持久化对象。
-
-本项目数据库使用拼音命名，但 Java 模型统一使用英文，因此 DO 不要求机械对应数据库表名。
-
-例如：
-
-```text
-数据库表：ryxx
-Java：PersonDO
-```
-
-数据库：
-
-```text
-zjhm
-rqsj
-lqsj
-```
-
-Java：
-
-```java
-private String identityNumber;
-private LocalDateTime entryTime;
-private LocalDateTime exitTime;
-```
+如果目标模块已有清晰且稳定的 Service，并且能够表达跨模块能力，可以直接复用。
 
 ---
 
-## DTO
+# 9. 模型边界
 
-用于跨层、跨模块或跨系统的数据传输。
+模型分类与 Package 归属统一由 Java 编码规范维护：
 
-只有存在明确的数据传输职责时才创建。
+- [java.md](../coding/java.md)
 
----
+本文只强调：
 
-## BO
-
-用于表达业务处理过程中需要的业务对象。
-
-只有存在实际业务价值时才创建。
-
----
-
-## Query
-
-用于封装查询条件。
-
-查询条件较多时，应使用明确的 Query 对象。
-
-避免：
-
-```java
-Map<String, Object>
-```
-
-作为普通业务查询条件。
-
----
-
-## VO
-
-用于展示层或 API 输出。
-
-VO 根据接口需求设计，不根据数据库字段机械生成。
-
----
-
-# 8. 数据库防腐层
-
-本项目规定：
-
-```text
-数据库：拼音
-    ↓
-Mapper / ResultMap
-    ↓
-Java：英文
-```
-
-例如：
-
-```text
-数据库              Java
-
-zjhm       →        identityNumber
-xm         →        name
-rqsj       →        entryTime
-lqsj       →        exitTime
-csbh       →        placeCode
-fzxbh      →        centerCode
-```
-
-通过 MyBatis 显式建立映射：
-
-```xml
-<resultMap id="PersonResultMap" type="PersonDO">
-    <result property="identityNumber" column="zjhm"/>
-    <result property="name" column="xm"/>
-    <result property="entryTime" column="rqsj"/>
-    <result property="exitTime" column="lqsj"/>
-</resultMap>
-```
-
-禁止：
-
-```text
-zjhm
- ↓
-DO.zjhm
- ↓
-DTO.zjhm
- ↓
-VO.zjhm
-```
-
-数据库拼音命名不得向 Java 业务模型扩散。
-
----
-
-# 9. 模型转换原则
+* 不直接把数据库 DO 当作 HTTP 输出；
+* 不为了分层形式机械创建 DTO / BO / Converter；
+* 模型职责发生变化时再进行转换；
+* 数据库模型与 Java/API 的隔离由对应 Java、MyBatis 和数据库规范负责。
 
 不要机械创建：
 
 ```text
-DO → DTO → BO → VO
+Request → DTO → BO → DO → BO → VO
 ```
-
-只有模型职责发生变化时才进行转换。
 
 原则：
 
-> 不为了少写转换代码破坏边界，也不为了形式完整增加无意义模型。
+> 模型跟随真实职责，不跟随形式化层级。
 
 ---
 
-# 10. 事务边界
+# 10. 事务与并发边界
 
-事务根据数据一致性需求确定，而不是根据所在层级机械决定。
+事务边界由数据一致性需求决定，不由 Controller / Service / Manager / Mapper 的层级名称机械决定。
 
-核心原则：
+本文不重复事务、锁、隔离级别和跨线程细节。
 
-> 没有事务需求，就不要显式开启事务。
-
----
-
-## 10.1 普通快照读
-
-普通查询默认不显式开启事务。
-
-例如：
-
-```java
-public PlaceDetailVO detail(String id) {
-    PlaceDO place = placeManager.getById(id);
-    List<EquipmentDO> equipment =
-            equipmentManager.listByPlaceId(id);
-
-    return buildVO(place, equipment);
-}
-```
-
-即使：
-
-* 查询多个表；
-* 调用多个 Mapper；
-* 调用多个 Manager；
-
-只要这些查询只是普通快照读，并且业务不要求它们共享同一个一致性快照，就没有必要增加：
-
-```java
-@Transactional
-```
-
-也不要机械增加：
-
-```java
-@Transactional(readOnly = true)
-```
-
-单纯“这是查询方法”不是开启事务的理由。
-
----
-
-## 10.2 Manager 层事务
-
-当 Manager 内部包含多个数据库写操作，并要求：
-
-```text
-全部成功
-或
-全部回滚
-```
-
-时，应在 Manager 层建立事务。
-
-例如：
-
-```java
-@Transactional
-public void auditPlace(...) {
-    placeMapper.update(...);
-    auditRecordMapper.insert(...);
-    operationLogMapper.insert(...);
-}
-```
-
-这种场景适合作为一个独立原子操作。
-
----
-
-## 10.3 Service 层事务
-
-如果一个完整业务用例需要协调多个 Manager，并要求这些写操作整体成功或失败，可以将事务提升到 Service。
-
-例如：
-
-```java
-@Transactional
-public void registerCase(...) {
-    caseManager.create(...);
-    materialManager.register(...);
-    personManager.bind(...);
-}
-```
-
-事务边界应该覆盖：
-
-> 真正需要保持原子性的数据修改范围。
-
----
-
-## 10.4 查询需要事务的例外
-
-普通快照读默认不开启显式事务。
-
-只有存在明确需求时，查询才建立事务边界，例如：
-
-### 多条查询必须共享同一个数据库快照
-
-例如：
-
-```text
-查询 A
-   ↓
-业务计算
-   ↓
-查询 B
-```
-
-如果 A 和 B 必须基于同一个数据库快照，需要明确设计事务及隔离级别。
-
-不能仅因为添加：
-
-```java
-@Transactional(readOnly = true)
-```
-
-就默认认为多个查询一定获得了相同快照。
-
----
-
-### 查询需要锁
-
-例如：
-
-```sql
-SELECT ...
-FOR UPDATE
-```
-
-此类查询本身具有事务和锁语义，应运行在明确的事务中。
-
----
-
-### 查询后修改要求并发一致性
-
-例如：
-
-```text
-读取状态
-   ↓
-判断
-   ↓
-修改状态
-```
-
-如果要求整个过程保持一致，应通过事务以及：
-
-* 乐观锁；
-* 悲观锁；
-* 唯一约束；
-* 合适的隔离级别；
-
-保证正确性。
-
----
-
-## 10.5 禁止扩大事务范围
-
-禁止：
-
-* 因为调用多个 Manager 就开启事务；
-* 因为调用多个 Mapper 就开启事务；
-* 给所有查询方法统一加 `@Transactional(readOnly = true)`；
-* 给所有 Service 方法统一加事务；
-* 给所有 Manager 方法统一加事务；
-* 为了“保险”扩大事务范围。
-
-事务中应尽量避免：
-
-* HTTP / RPC 调用；
-* 文件上传；
-* 长时间等待；
-* 大量耗时计算；
-* 无必要的异步操作。
-
-复杂事务、事务传播、隔离级别、锁和异步规则读取：
+涉及事务时必须读取：
 
 - [transactions.md](transactions.md)
+
+涉及异步、线程池或跨线程执行时读取：
+
 - [concurrency.md](concurrency.md)
+
+只保留以下分层判断：
+
+```text
+可复用原子数据操作
+→ Manager 可以作为事务边界
+
+跨多个 Manager 的完整业务写入需要整体提交/回滚
+→ Service 可以作为事务边界
+```
+
+但最终仍以真实一致性范围为准。
 
 ---
 
@@ -862,10 +604,12 @@ Mapper
 
 ```text
 Manager
-Domain
+Domain Service
 Repository
 RepositoryImpl
 Converter
+Assembler
+Factory
 ```
 
 也不要以 SOLID 为理由机械增加：
@@ -888,30 +632,33 @@ Adapter
 
 编码前：
 
-1. 查看当前模块已有分层。
-2. 找到类似实现。
+1. 查看当前模块已有分层和调用关系。
+2. 找到至少一个类似实现。
 3. 判断逻辑属于 Controller、Service、Manager 还是 Mapper。
-4. 判断是否已经存在可复用实现。
-5. 涉及事务时，先判断是否真的存在原子性、一致性或锁需求。
-6. 新增或调整类、接口、抽象时，检查是否存在真实的职责或变化需求，不得为了 SOLID 机械增加抽象。
+4. 判断是否已经存在可复用能力。
+5. 新增或调整类、接口、抽象时，确认存在真实职责、变化、替换或隔离需求。
+6. 涉及模型时读取 Java 规范，不在本文自行推导模型体系。
+7. 涉及事务、锁或一致性时读取事务规范。
+8. 涉及并发或跨线程时读取并发规范。
 
 编码后检查：
 
 * Controller 是否直接调用 Mapper；
 * Controller 是否存在复杂业务逻辑；
+* Service 是否混入 HTTP、SQL 或第三方协议细节；
 * Mapper 是否包含业务判断；
-* 是否创建了无实际价值的 Manager / DTO / BO；
-* 是否使用 Map 替代明确 Query；
-* 数据库拼音是否泄漏到 Java 模型；
 * 是否跨模块直接访问其他模块 Mapper；
-* 普通快照读是否被无意义地包进事务；
-* 事务范围是否超过真正需要保证一致性的范围；
-* 一个类是否同时承担多个明显不同的职责，违反 SRP；
+* 是否创建无实际价值的 Manager / Facade / Repository / Converter；
+* 一个类是否同时承担多个明显不同职责，违反 SRP；
 * 新增扩展点是否来自真实变化需求，而不是为了套用 OCP；
-* 子类或实现是否改变了抽象类型的核心契约，违反 LSP；
-* 接口是否迫使调用方依赖大量无关能力，违反 ISP；
-* 高层业务是否直接耦合易变的第三方或底层技术细节，应该通过稳定边界隔离；
+* 子类或实现是否改变抽象类型核心契约，违反 LSP；
+* 接口是否迫使调用方或实现方依赖大量无关能力，违反 ISP；
+* 高层业务是否直接耦合易变第三方或技术细节，需要按 DIP 建立稳定边界；
 * 是否以 DIP 为理由机械创建 `Interface + Impl`；
 * 是否以 SOLID 为理由增加无实际价值的 Strategy / Factory / Repository 包装。
 
 优先保持现有合理架构，不为了遵守规范进行无意义重构。
+
+最终原则：
+
+> 分层用于明确职责和依赖方向，SOLID 用于辅助判断真实设计问题；两者都不能成为过度设计的理由。
