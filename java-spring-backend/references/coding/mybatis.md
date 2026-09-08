@@ -223,6 +223,57 @@ Query 的职责和 Package 读取：
 
 本文不重复维护第二套阈值。
 
+### 6.1 集合查询的 Null 契约
+
+普通 MyBatis 集合查询使用：
+
+```java
+List<PlaceDO> listByQuery(PlaceQuery query);
+```
+
+表达“零到多条结果”。对于标准 MyBatis 集合查询，无匹配记录时按空集合处理，不使用 `null` 表示“没有记录”。
+
+因此调用方不应机械增加：
+
+```java
+List<PlaceDO> places = placeMapper.listByQuery(query);
+List<PlaceDO> safePlaces = places == null
+        ? new ArrayList<>()
+        : places;
+```
+
+也不需要：
+
+```java
+Optional.ofNullable(places)
+        .orElseGet(Collections::emptyList);
+```
+
+已经具有非 Null 集合契约时，应直接按契约使用：
+
+```java
+List<PlaceDO> places = placeMapper.listByQuery(query);
+return places.stream()
+        .map(...)
+        .toList();
+```
+
+如果目标项目存在自定义 Mapper 实现、插件、代理或其他数据访问封装，明确改变了标准集合返回契约，应以实际项目契约为准；不要仅根据方法名猜测。
+
+单对象查询不适用本规则。例如：
+
+```java
+PlaceDO getById(String id);
+```
+
+不存在时究竟返回 `null`、`Optional` 还是抛出异常，应遵循项目已有契约。
+
+如果 `null` 来自第三方 SDK、外部 Client 或其他确实允许 Null 的来源，应在最靠近来源的 Client / Adapter 等边界统一归一化，再向上提供稳定集合契约；不要让 Service / Manager 层层重复兜底。
+
+原则：
+
+> 数据来源的 Null 差异在边界归一化一次，上层依赖稳定契约；标准集合查询无结果使用空集合，不使用 Null。
+
 ---
 
 ## 7. `#{}` 与 `${}`
@@ -500,12 +551,13 @@ MyBatis 任务如果修改了 SQL，应同时加载 `sql.md`；如果只调整 R
 2. 搜索当前项目已有类似实现。
 3. 新增组件前按职责确定 Package。
 4. 检查参数是否应使用 `#{}`，`${}` 是否确实属于结构并经过白名单。
-5. 检查数据库列与 Java 属性的映射是否明确。
-6. 检查 TypeHandler 是否只承担技术转换。
-7. 动态 SQL 是否清晰且没有隐藏业务流程。
-8. 修改 SQL 时同时读取 `sql.md`。
-9. 涉及事务时读取 `transactions.md`。
-10. 执行目标项目已有相关测试。
+5. 检查集合 Mapper 的 Null 契约；标准集合查询无结果不在上层机械增加 Null 兜底。
+6. 检查数据库列与 Java 属性的映射是否明确。
+7. 检查 TypeHandler 是否只承担技术转换。
+8. 动态 SQL 是否清晰且没有隐藏业务流程。
+9. 修改 SQL 时同时读取 `sql.md`。
+10. 涉及事务时读取 `transactions.md`。
+11. 执行目标项目已有相关测试。
 
 检查重点：
 
@@ -513,6 +565,8 @@ MyBatis 任务如果修改了 SQL，应同时加载 `sql.md`；如果只调整 R
 * MyBatis 技术组件是否错误放入业务 Mapper Package；
 * 是否重复创建已有 TypeHandler / Interceptor / Plugin；
 * Query / DO 的职责和 Package 是否符合 `layering.md`；
+* 标准 `List<T>` 查询的调用方是否无依据增加 `list == null ? emptyList : list` 等防御；
+* 如果数据源确实允许 Null，是否在最靠近来源的边界归一化，而不是 Service / Manager 层层兜底；
 * 是否把数据库物理命名无必要泄漏到 Java；
 * ResultMap 是否清楚表达列与属性映射；
 * `${}` 是否直接接收用户输入；
@@ -522,4 +576,4 @@ MyBatis 任务如果修改了 SQL，应同时加载 `sql.md`；如果只调整 R
 
 最终原则：
 
-> MyBatis 规范负责“Java 与 SQL 如何连接和映射”；SQL 规范负责“SQL 本身是否正确、安全、清晰和高效”。
+> MyBatis 规范负责“Java 与 SQL 如何连接和映射”；标准集合查询无结果使用空集合；SQL 规范负责“SQL 本身是否正确、安全、清晰和高效”。
