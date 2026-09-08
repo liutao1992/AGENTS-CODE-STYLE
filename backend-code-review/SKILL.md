@@ -44,12 +44,12 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 
 | 涉及领域 | 加载规范 | 主要检查 |
 | --- | --- | --- |
-| Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、Lombok、Null、集合、异常实现、日志、格式、注释 |
+| Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、Lombok、Null、集合、集合返回契约、异常实现、日志、格式、注释 |
 | 分层、模型、Package、SOLID、跨模块、入站/出站 | [分层](../java-spring-backend/references/architecture/layering.md) | 职责、依赖方向、模型归属、技术组件归属、过度设计 |
 | Spring 框架使用 | [Spring](../java-spring-backend/references/coding/spring.md) | DI、Bean、Validation、重复结构校验、默认兜底、Proxy、Advice、Spring 注解机制 |
 | HTTP API | [API](../java-spring-backend/references/api/api-design.md) | URL、Method、Request/VO、统一响应、错误契约、兼容、分页、幂等 |
 | 异常跨层流转 | [异常处理](../java-spring-backend/references/architecture/error-handling.md) | 转换边界、cause、日志归属、重复记录、对外泄漏 |
-| MyBatis 映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md) | Mapper、XML、ResultMap、TypeHandler、参数绑定、动态 SQL |
+| MyBatis 映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md) | Mapper、XML、ResultMap、TypeHandler、参数绑定、集合查询 Null 契约、动态 SQL |
 | SQL | [SQL](../java-spring-backend/references/database/sql.md) | SQL 正确性、范围、安全、PostgreSQL、分页、N+1、性能 |
 | 数据库 Schema | [数据库设计](../java-spring-backend/references/database/database-design.md) | 命名、类型、Null、约束、索引、Migration、兼容 |
 | 事务、锁、一致性 | [事务](../java-spring-backend/references/architecture/transactions.md) | 事务必要性、范围、传播、隔离、回滚、锁、竞态 |
@@ -118,6 +118,7 @@ record / class
 日志框架
 分页结构
 校验边界
+集合 Null 契约
 ```
 
 如果目标项目已有稳定契约或历史 API，以项目为主，不得仅为了迁移到 Skill 默认风格形成 finding。
@@ -189,6 +190,69 @@ blank → 默认编码
 核心原则：
 
 > 结构校验只在合适的可信边界表达一次；业务层保留真正业务校验，不通过重复校验或默认值掩盖边界问题。
+
+---
+
+## 集合与 Null 契约审查
+
+集合和 Null 的通用语义读取 `java.md`；MyBatis 集合查询的具体契约读取 `mybatis.md`。
+
+重点识别这种无依据防御：
+
+```java
+List<AssetDO> assets = mapper.listAssets(...);
+List<AssetDO> safeAssets = assets == null
+        ? new ArrayList<>()
+        : assets;
+```
+
+以及：
+
+```java
+Optional.ofNullable(assets)
+        .orElseGet(Collections::emptyList);
+```
+
+或：
+
+```java
+if (assets != null) {
+    ...
+}
+```
+
+如果下层已经具有明确的非 Null 集合契约，这些代码通常只是重复防御，会增加噪声并让调用方错误地认为正常路径可能返回 Null。
+
+形成 finding 前必须确认：
+
+1. 返回值确实是集合而不是单对象；
+2. 当前数据源或方法契约明确保证非 Null；
+3. 没有项目自定义实现、插件或兼容逻辑改变该契约；
+4. 当前 Null 判断不是为了兼容已知历史数据源或第三方 SDK。
+
+对于标准 MyBatis `List<T>` 集合查询，无匹配记录按空集合处理；如果 Service / Manager 仍机械写 `list == null ? emptyList : list`，可以按 MyBatis 与 Java 集合规范检查是否属于无意义兜底。
+
+反过来，如果数据来自明确允许 Null 的第三方 SDK、外部响应或遗留接口，不应机械删除 Null 判断。应优先检查是否可以在最靠近来源的 Client / Adapter 等边界归一化一次，再让上层依赖稳定契约。
+
+不要形成这种泛化 finding：
+
+```text
+“所有集合都不允许 Null”
+```
+
+真正要检查的是：
+
+```text
+来源契约是否明确
+      ↓
+是否在正确边界归一化
+      ↓
+上层是否仍无意义重复防御
+```
+
+核心原则：
+
+> 先确认契约，再删除防御；边界归一化一次，上层不要层层猜测 Null。
 
 ---
 
@@ -270,6 +334,7 @@ XML
 #{}/ ${}
 ResultMap
 TypeHandler
+集合查询 Null 契约
 动态 SQL
 ```
 
