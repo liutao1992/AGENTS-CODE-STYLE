@@ -48,6 +48,8 @@ class / record
 方法
 Null / Optional
 集合 / 泛型
+集合返回值与 Null 契约
+无依据的空集合 / Null 兜底
 BigDecimal / 时间
 catch / throw
 日志
@@ -160,6 +162,7 @@ Mapper 接口
 Mapper XML
 @Param
 #{}/ ${}
+Mapper List<T> 集合查询 Null 契约
 ResultMap
 TypeHandler
 Interceptor / Plugin
@@ -167,7 +170,7 @@ Interceptor / Plugin
 MyBatis 技术 Package
 ```
 
-如果实际修改 SQL，再同时加载 SQL；仅调整 ResultMap / TypeHandler 时不需要自动加载全部 SQL 规则。
+如果实际修改 SQL，再同时加载 SQL；仅调整 ResultMap、TypeHandler 或集合返回契约时不需要自动加载全部 SQL 规则。
 
 ---
 
@@ -310,6 +313,15 @@ Mock / Testcontainers
 发现 Request 已 @NotBlank，Service 又 hasText 二次校验
 → Spring
 
+发现普通 Java 集合已经有非 Null 契约，上层又 list == null 兜底
+→ Java
+
+发现 MyBatis List<T> 查询后 Service 又 list == null ? emptyList : list
+→ MyBatis + Java
+
+第三方 SDK items 可能为 null，需要统一转换为空集合
+→ 分层 + Java；若涉及 Client / Adapter 职责再读取分层
+
 新增 Mapper ResultMap
 → MyBatis
 
@@ -353,6 +365,8 @@ Mock / Testcontainers
 - Client / Adapter 负责第三方协议细节；Manager 只有在存在真实应用级复用、组合或原子能力时才引入。
 - 已由可信入站边界通过 Bean Validation 保证的结构约束，不在 Service / Manager 机械重复同义 `null` / blank / size 校验；多入口场景应补齐真正缺失的入口或公共契约。
 - 已声明必填或非空的字段不得通过 `""`、`0`、默认编码、默认状态等无依据兜底掩盖非法输入；只有既有契约明确要求时才允许默认行为。
+- 集合无结果优先使用空集合表达；已有明确非 Null 集合契约时，上层不再机械增加 Null 防御。外部或遗留来源确实允许 Null 时，在最靠近来源的边界归一化一次，再让上层依赖稳定契约。
+- 标准 MyBatis `List<T>` 集合查询无匹配记录按空集合处理；不要在 Service / Manager 中无依据重复 `list == null ? emptyList : list`。
 - SOLID 用于解决真实职责和依赖问题，不用于机械创建 `Interface + Impl`、Strategy、Factory、Repository 或额外层级。
 
 ---
