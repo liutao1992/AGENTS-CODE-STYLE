@@ -46,6 +46,7 @@ description: 按团队后端规范开发、修复和重构 Java、Spring Boot、
 Lombok
 class / record
 方法
+方法参数数量 / 参数对象
 Null / Optional
 集合 / 泛型
 集合返回值与 Null 契约
@@ -60,6 +61,26 @@ catch / throw
 
 ---
 
+### 项目目录与业务模块
+
+以下情况加载 [项目与业务模块目录](references/architecture/project-structure.md)：
+
+```text
+新建业务 module
+调整项目目录
+业务优先 / 技术优先的代码组织
+module 内 controller / service / manager / mapper 等目录
+common / util / constant / third 等公共目录归属
+跨模块物理组织
+新增 Package 的模块位置
+```
+
+目录规范决定“项目和模块如何物理组织”，不替代分层规范判断类的逻辑职责。
+
+如果同时需要判断 Controller / Service / Manager / Mapper / Client 的职责，再加载分层；如果只是新增一个符合既有结构的普通 Java 类，不因为存在 `module` 目录就机械加载全部架构规范。
+
+---
+
 ### 分层、模型与 Package
 
 以下情况加载 [分层](references/architecture/layering.md)：
@@ -68,14 +89,16 @@ catch / throw
 新增或移动类
 判断 Controller / Service / Manager / Mapper / Client 职责
 Request / Query / DTO / BO / DO / VO 分类
-Package 归属
+Package 职责归属
 跨模块调用
 入站 / 出站适配
+当前调用者上下文边界
+Service 职责拆分
 SOLID
 是否过度抽象
 ```
 
-涉及模型 Java 实现时再同时加载 Java。
+涉及项目 / module 的物理目录组织时再加载 `project-structure.md`；涉及模型 Java 实现时再同时加载 Java。
 
 ---
 
@@ -85,6 +108,9 @@ SOLID
 
 ```text
 @RestController / @Controller
+@RequestMapping / @GetMapping / @PostMapping
+Spring MVC 路由注解位置
+OpenAPI / Swagger 注解机制
 Bean Validation / @Valid
 重复结构校验 / Service 二次校验
 必填字段默认兜底
@@ -301,17 +327,32 @@ Mock / Testcontainers
 修改一个普通 Java 工具方法
 → Java
 
+普通业务方法参数超过 5 个
+→ Java
+
+新增一个全新 place 业务 module
+→ 项目结构 + 分层；具体 Java 实现再加载 Java
+
+只调整 module 下的物理 Package 组织
+→ 项目结构
+
 新增 PlaceVO
 → 分层 + Java
 
 修改 Controller URL / 返回字段
 → API + 必要的 Spring
 
+只调整 @RequestMapping / @GetMapping 的注解位置
+→ Spring
+
 只给 Controller 增加 @Valid
 → Spring
 
 发现 Request 已 @NotBlank，Service 又 hasText 二次校验
 → Spring
+
+发现 Service 过大，需要判断是否按业务能力拆分
+→ 分层 + 必要的 Java
 
 发现普通 Java 集合已经有非 Null 契约，上层又 list == null 兜底
 → Java
@@ -320,7 +361,7 @@ Mock / Testcontainers
 → MyBatis + Java
 
 第三方 SDK items 可能为 null，需要统一转换为空集合
-→ 分层 + Java；若涉及 Client / Adapter 职责再读取分层
+→ Java；如果同时要判断 Client / Adapter 归属，再加载分层
 
 新增 Mapper ResultMap
 → MyBatis
@@ -350,19 +391,25 @@ Mock / Testcontainers
 ## 新建文件前的职责判断
 
 1. 这个类实际负责什么？
-2. 是入站适配、业务用例、应用能力、数据库访问、外部技术适配、模型还是通用基础设施？
-3. 是否已经存在相同或类似能力？
-4. 如果是模型，属于 Request / Query / DTO / BO / DO / VO 中哪一种？
-5. Package 应由职责决定，而不是由当前任务目录决定。
-6. 确定职责和 Package 后，再读取对应实现规范并创建文件。
+2. 属于哪个业务模块，目标项目是否已有同类目录？
+3. 是入站适配、业务用例、应用能力、数据库访问、外部技术适配、模型还是通用基础设施？
+4. 是否已经存在相同或类似能力？
+5. 如果是模型，属于 Request / Query / DTO / BO / DO / VO 中哪一种？
+6. Package 应由职责决定，而不是由当前任务目录决定。
+7. 确定模块、职责和 Package 后，再读取对应实现规范并创建文件。
 
 重要默认：
 
+- 新项目或没有既有约定的新业务区域，优先按业务模块组织，再在模块内部按职责分层；目标项目已有稳定目录时不强制迁移到 `module`。
+- `common`、`util`、`constant`、`third` 等目录不能成为无边界兜底，公共能力必须具有真实跨模块职责。
 - 通用 MyBatis TypeHandler 属于 MyBatis 技术基础设施，不因业务 Mapper 使用就放入业务 `mapper`。
 - 具体业务输出优先使用 `*VO`；统一 HTTP 响应默认推荐 `ApiResponse<T>`，但目标项目已有响应契约时以项目为准，不无授权迁移历史 API。
 - 普通业务模型默认使用普通 `class` 和项目现有 Lombok 风格；不为了减少样板代码主动换成 `record`。
+- 普通业务方法参数默认不超过 5 个；超过时优先检查职责并封装真实语义对象。普通查询条件超过 3 个优先评估 Query，不使用 `Map<String, Object>` 机械兜底。
 - 数据库物理命名与 Java 英文业务语义通过 Mapper / ResultMap 隔离。
 - Client / Adapter 负责第三方协议细节；Manager 只有在存在真实应用级复用、组合或原子能力时才引入。
+- 请求绑定的当前用户 / 部门 / 租户等上下文优先在入站边界取得并按业务需要显式传递，不让 Service / Manager 无必要依赖 Web Request 或请求专用 ThreadLocal。
+- Service 过大时按真实业务用例和变化原因评估拆分，不按文件行数机械创建 Helper / Common / Validator Service。
 - 已由可信入站边界通过 Bean Validation 保证的结构约束，不在 Service / Manager 机械重复同义 `null` / blank / size 校验；多入口场景应补齐真正缺失的入口或公共契约。
 - 已声明必填或非空的字段不得通过 `""`、`0`、默认编码、默认状态等无依据兜底掩盖非法输入；只有既有契约明确要求时才允许默认行为。
 - 集合无结果优先使用空集合表达；已有明确非 Null 集合契约时，上层不再机械增加 Null 防御。外部或遗留来源确实允许 Null 时，在最靠近来源的边界归一化一次，再让上层依赖稳定契约。
