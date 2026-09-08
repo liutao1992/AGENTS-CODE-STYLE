@@ -973,25 +973,34 @@ PlaceController
 
 ```java
 @PostMapping("/{id}/audit")
-public void audit(
+public ApiResponse<Void> audit(
         @PathVariable
         @NotBlank
         String id,
         @Valid @RequestBody PlaceAuditRequest request) {
 
     placeService.audit(id, request, currentOperator());
+    return ApiResponse.success();
 }
 ```
 
-查询类接口默认可以使用：
+查询类接口示例：
 
-```text
-ApiResponse<PlaceVO>
+```java
+@GetMapping("/{id}")
+public ApiResponse<PlaceVO> detail(
+        @PathVariable
+        @NotBlank
+        String id) {
+
+    PlaceVO place = placeService.getById(id);
+    return ApiResponse.success(place);
+}
 ```
 
-承载业务 VO。
+这里的 `ApiResponse.success(...)` 仅表示统一响应包装的示例构造方式；具体静态方法名、构造方式、错误结构和序列化字段必须以目标项目实际实现为准。
 
-但实际 Controller 方法签名、响应构造方式和 JSON 契约必须以目标项目既有接口风格为准。如果项目已有其他统一响应类型，应继续沿用，不为了示例强制改为 `ApiResponse<T>`。
+如果项目已经存在其他统一响应类型、固定 Controller 返回风格或历史 API 契约，应继续沿用项目现有设计，不得为了套用本示例强制修改为 `ApiResponse<T>`。
 
 Controller 不承载数据库查询、状态判断、事务或复杂模型组装。
 
