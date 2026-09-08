@@ -53,10 +53,11 @@ description: 按团队后端规范开发、修复和重构 Java、Spring Boot、
 使用规范中的具体判断及例外：
 
 - 通用 MyBatis TypeHandler 属于 common.mybatis.handler，不因某个业务 Mapper 使用而放进业务 mapper 包。
-- 业务返回模型优先使用模块 vo 包中的 *VO；不因此重命名已有公共 API 或把所有通用响应包装都改成 VO。
+- 具体业务返回模型优先使用模块 `vo` 包中的 `*VO`；`Response` 仅作为项目级通用 HTTP 响应包装概念，例如 `AjaxResult`、`Result<T>`、`ApiResponse<T>`、`PageResponse<T>`。不因此无授权重命名已有公共 API。
 - 业务模型默认普通 class，使用 Lombok 生成无业务逻辑的访问器；模块明确统一使用 record 或任务明确要求时允许 record。不机械给所有字段添加 Setter。
 - 数据库拼音通过显式映射转换为 Java 英文属性；示例词汇需结合目标项目已有数据字典，不自行创造第二套术语。
 - 普通快照读不因多个 Mapper 就加事务；需要原子性或一致性快照时按事务规范判断。异步不得用于规避事务问题。
+- SOLID 用于识别真实职责、扩展、契约、接口和依赖问题，不用于机械创建 `Interface + Impl`、Strategy、Factory、Repository 包装或额外层级。
 
 ## 交付要求
 
