@@ -2,27 +2,21 @@
 
 本文档定义 Spring Boot 相关编码规范。
 
-应用分层详细规则读取：
+相关规范：
 
-- [layering.md](../architecture/layering.md)
-
-事务规则读取：
-
-- [transactions.md](../architecture/transactions.md)
-
-并发与异步规则读取：
-
-- [concurrency.md](../architecture/concurrency.md)
-
-API 设计规则读取：
-
-- [api-design.md](../api/api-design.md)
+- [应用分层](../architecture/layering.md)
+- [事务](../architecture/transactions.md)
+- [并发](../architecture/concurrency.md)
+- [API 设计](../api/api-design.md)
+- [Java 编码与模型](java.md)
 
 核心原则：
 
 > Controller 管接口，Service 管业务流程，Manager 管复用、适配和原子操作。
 
 > HTTP 语义不得向 Service / Manager 扩散。
+
+> 具体业务接口输出统一优先使用 VO；Response 仅用于项目级通用 HTTP 响应包装。
 
 > 不根据推测自行创造业务状态、编码、默认值或兼容规则。
 
@@ -50,7 +44,6 @@ public AjaxResult audit(
         @Valid @RequestBody PlaceAuditRequest request) {
 
     placeService.audit(id, request, currentOperator());
-
     return AjaxResult.success();
 }
 ```
@@ -111,6 +104,8 @@ doSomething(...)
 execute(...)
 ```
 
+Service 不应成为 HTTP、SQL、第三方协议和业务流程的混合层。
+
 ---
 
 ## 3. Service 不依赖 HTTP 语义
@@ -124,7 +119,7 @@ HttpServletRequest
 HttpServletResponse
 ```
 
-禁止：
+禁止把以下方式作为普通业务失败的默认表达：
 
 ```java
 throw new ApiException(
@@ -132,23 +127,19 @@ throw new ApiException(
         "场所不存在");
 ```
 
-作为普通业务流程的默认异常表达方式。
-
-业务失败应优先使用项目统一业务异常。
-
-例如：
+业务失败应优先使用项目已有业务异常体系，例如：
 
 ```java
 throw new PlaceNotFoundException(id);
 ```
 
-或者项目已有统一异常：
+或者：
 
 ```java
 throw new BusinessException("场所不存在");
 ```
 
-HTTP 状态码和 HTTP 错误响应由 Web 层统一转换：
+HTTP 状态码和错误响应由 Web 层统一转换：
 
 ```text
 Service / Manager
@@ -207,7 +198,7 @@ Service / Manager 中新增以下内容前，必须先搜索已有定义：
 1. 现有 Java 代码；
 2. Enum / Constant；
 3. 类似业务实现；
-4. Request / Response；
+4. Request / VO；
 5. 数据库已有值；
 6. 测试；
 7. API 契约；
@@ -223,17 +214,7 @@ Service / Manager 中新增以下内容前，必须先搜索已有定义：
 
 ## 5. 业务常量与枚举
 
-不要在 Service 中大量散落：
-
-```java
-"approved"
-"rejected"
-"bazx"
-"fzx"
-"baq"
-"1"
-"0"
-```
+不要在 Service 中大量散落魔法字符串。
 
 如果项目已经存在对应枚举或常量，必须复用。
 
@@ -270,7 +251,7 @@ Manager 为可选层。
 * 多表一致性操作；
 * 第三方服务适配；
 * 通用数据组装；
-* 缓存等公共技术能力封装；
+* 缓存等技术能力封装；
 * 可复用原子操作。
 
 例如：
@@ -305,7 +286,7 @@ Builder
 
 > 真实职责出现后再抽取，不为了形式增加层级。
 
-具体规则读取：
+详细规则读取：
 
 - [layering.md](../architecture/layering.md)
 
@@ -326,7 +307,7 @@ Mapper
 例如：
 
 ```java
-public PlaceResponse getById(String id) {
+public PlaceVO getById(String id) {
     PlaceDO place = placeMapper.getById(id);
     ...
 }
@@ -369,7 +350,7 @@ PlaceService / PlaceFacade
 例如：
 
 ```java
-PlaceResponse.from(place);
+PlaceVO.from(place);
 ```
 
 或者少量字段赋值。
@@ -396,36 +377,26 @@ Builder
 
 ---
 
-## 9. Request / Response
+## 9. Request / VO / 通用 Response
 
-Controller 接口应使用明确的：
+接口输入使用明确的 Request；具体业务接口输出统一优先使用 VO。
 
-```text
-Request
-Response
-VO
-```
-
-禁止直接使用 DO 作为 HTTP API 模型。
-
-例如：
+典型调用：
 
 ```text
-HTTP
- ↓
+HTTP Request
+     ↓
 PlaceAuditRequest
- ↓
+     ↓
+Controller
+     ↓
 Service
-```
-
-返回：
-
-```text
-Service
- ↓
-PlaceResponse
- ↓
-HTTP
+     ↓
+PlaceVO
+     ↓
+Controller
+     ↓
+HTTP Response
 ```
 
 数据库 DO：
@@ -436,13 +407,50 @@ PlaceDO
 
 不得因为方便直接暴露给客户端。
 
-API 模型详细规则读取：
+本项目模型语义：
 
-- [api-design.md](../api/api-design.md)
+```text
+Request
+→ 接口输入
 
-Java 模型编码规则读取：
+VO
+→ 具体业务视图输出
+
+Response
+→ 项目级通用 HTTP 响应包装概念
+```
+
+例如具体业务返回模型优先：
+
+```text
+PlaceVO
+PlaceStatsVO
+PlaceTreeNodeVO
+```
+
+而不是新建：
+
+```text
+PlaceResponse
+PlaceStatsResponse
+place.response.*
+```
+
+通用响应包装可以继续沿用项目已有：
+
+```text
+AjaxResult
+Result<T>
+ApiResponse<T>
+PageResponse<T>
+```
+
+不得为了统一命名擅自修改已经发布的公共 API；现有历史 `*Response` 模型仅在当前任务明确要求或兼容性允许时迁移。
+
+详细模型规则读取：
 
 - [java.md](java.md)
+- [api-design.md](../api/api-design.md)
 
 ---
 
@@ -506,13 +514,7 @@ Bean Validation 负责：
 
 ## 11. 输入标准化
 
-简单、无业务歧义的输入标准化可以在接口或业务边界统一处理。
-
-例如：
-
-```text
-去除明确无意义的首尾空格
-```
+简单、无业务歧义的输入标准化可以在接口或业务边界统一处理，例如去除明确无意义的首尾空格。
 
 但不得自行进行可能改变业务语义的转换。
 
@@ -550,19 +552,7 @@ public class PlaceService {
 }
 ```
 
-也可以使用显式构造器：
-
-```java
-@Service
-public class PlaceService {
-
-    private final PlaceManager placeManager;
-
-    public PlaceService(PlaceManager placeManager) {
-        this.placeManager = placeManager;
-    }
-}
-```
+也可以使用显式构造器。
 
 避免新增字段注入：
 
@@ -586,16 +576,9 @@ new SomeService(...)
 new SomeManager(...)
 ```
 
-创建本应由 Spring 管理的：
+创建本应由 Spring 管理的 Service、Manager、Repository、Component、Configuration 等组件。
 
-* Service；
-* Manager；
-* Repository；
-* Component；
-* Configuration；
-* Spring 基础设施 Bean。
-
-普通 DTO、DO、VO、Query 等数据对象不受此限制。
+普通 Request、Query、DTO、BO、DO、VO 等数据对象不受此限制。
 
 ---
 
@@ -612,15 +595,6 @@ application-{profile}.yml
 
 ```java
 @ConfigurationProperties
-```
-
-例如：
-
-```java
-@ConfigurationProperties(prefix = "place.upload")
-public class PlaceUploadProperties {
-    ...
-}
 ```
 
 避免大量分散：
@@ -666,27 +640,7 @@ DELETE
 
 普通快照读默认不显式开启事务。
 
-单个：
-
-```text
-INSERT
-UPDATE
-DELETE
-```
-
-也不因为前后存在普通查询就机械开启事务。
-
-例如：
-
-```text
-SELECT
-   ↓
-单条 UPDATE
-   ↓
-SELECT
-```
-
-不能仅因为出现多个数据库访问就默认添加事务。
+单个 INSERT / UPDATE / DELETE 也不因为前后存在普通查询就机械开启事务。
 
 详细规则必须读取：
 
@@ -714,8 +668,6 @@ UPDATE
 
 就自动保证并发正确性。
 
-多个请求仍可能同时读取旧状态。
-
 根据业务需要评估：
 
 * 条件 UPDATE；
@@ -724,7 +676,7 @@ UPDATE
 * 悲观锁；
 * 合适的事务隔离级别。
 
-例如状态流转优先考虑：
+例如状态流转可以评估：
 
 ```sql
 UPDATE ...
@@ -733,7 +685,7 @@ WHERE id = #{id}
   AND zt = #{expectedStatus}
 ```
 
-然后根据更新行数判断结果。
+并根据更新行数判断结果。
 
 详细规则读取：
 
@@ -756,13 +708,7 @@ ThreadPoolTaskExecutor
 
 - [concurrency.md](../architecture/concurrency.md)
 
-不得因为：
-
-```text
-多个操作看起来可以同时执行
-```
-
-就自动改为并发。
+不得因为多个操作“看起来可以同时执行”就自动改为并发。
 
 特别禁止：
 
@@ -782,29 +728,9 @@ ThreadPoolTaskExecutor
 
 必须注意代理边界。
 
-例如：
+同一个对象内部直接调用带这些注解的方法时，可能绕过 Spring Proxy。
 
-```java
-public void process() {
-    audit();
-}
-
-@Transactional
-public void audit() {
-}
-```
-
-同一个对象内部直接调用：
-
-```java
-audit();
-```
-
-可能绕过 Spring Proxy。
-
-不得仅因为方法上存在注解，就默认对应能力一定生效。
-
-应检查实际 Bean 调用关系。
+不得仅因为方法上存在注解，就默认对应能力一定生效；应检查实际 Bean 调用关系。
 
 ---
 
@@ -820,13 +746,7 @@ try {
 }
 ```
 
-项目存在统一异常处理机制时，应使用：
-
-```java
-@RestControllerAdvice
-```
-
-或现有全局异常处理方案。
+项目存在统一异常处理机制时，应使用现有 `@RestControllerAdvice` 或全局异常处理方案。
 
 职责应保持：
 
@@ -856,7 +776,8 @@ HTTP 状态 + 错误响应
 * URL；
 * HTTP Method；
 * Request 字段；
-* Response 字段；
+* VO / 已发布输出字段；
+* 通用响应包装结构；
 * 字段类型；
 * Null 语义；
 * 枚举值；
@@ -888,15 +809,6 @@ AOP
 
 普通纯 Java 能力无需自动变成 Spring Bean。
 
-例如：
-
-* 纯数据模型；
-* 简单值对象；
-* 无状态静态工具；
-* 纯转换函数；
-
-应根据实际职责决定。
-
 原则：
 
 > Spring 用于管理有生命周期、有依赖关系的应用组件，不是所有 Java 类都需要进入容器。
@@ -914,8 +826,8 @@ AOP
 5. 检查是否真的需要 Manager。
 6. 检查是否真的需要事务。
 7. 检查是否引入 HTTP 语义到 Service / Manager。
-8. 检查是否直接暴露 DO。
-9. 检查是否存在不必要的 Spring Bean。
+8. 检查具体业务输出是否正确使用 VO，是否直接暴露 DO。
+9. 检查是否存在不必要的 Spring Bean 或抽象。
 10. 检查完整调用链。
 11. 执行相关测试。
 
@@ -945,9 +857,11 @@ AOP
 
 ### 数据与模型
 
-* DO 是否直接作为 API Response；
-* Request / Response 是否职责明确；
-* 输入标准化是否改变了业务语义。
+* DO 是否直接作为 API 输出；
+* 具体业务输出是否使用 VO；
+* 是否错误新增 `*Response` 作为业务视图模型；
+* Request / Query / DTO / BO / DO / VO 是否职责明确；
+* 输入标准化是否改变业务语义。
 
 ### Spring 基础设施
 
@@ -973,5 +887,4 @@ AOP
 
 最终原则：
 
-> Controller 只处理接口边界，Service 表达业务流程，Manager 承担真正需要复用或原子化的能力；HTTP 语义止于 Web 层，业务规则必须有依据，事务和并发必须有真实需求。
-
+> Controller 只处理接口边界，Service 表达业务流程，Manager 承担真正需要复用或原子化的能力；具体业务输出使用 VO，HTTP 语义止于 Web 层，业务规则必须有依据，事务和并发必须有真实需求。
