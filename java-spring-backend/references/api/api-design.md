@@ -8,6 +8,8 @@
 
 > API 使用清晰的英文业务语义，不暴露数据库拼音命名和持久化细节。
 
+> 具体业务输出统一优先使用 VO；Response 仅用于项目级通用 HTTP 响应包装。
+
 > 没有明确需求时，优先保持已有接口兼容。
 
 ---
@@ -38,7 +40,7 @@ API 不应暴露：
 
 URL 应表达资源和业务语义。
 
-推荐使用：
+推荐：
 
 ```text
 /places
@@ -46,41 +48,23 @@ URL 应表达资源和业务语义。
 /equipments
 ```
 
-查询单个资源：
+常见资源操作：
 
 ```text
-GET /places/{id}
-```
-
-查询列表：
-
-```text
-GET /places
-```
-
-新增：
-
-```text
-POST /places
-```
-
-修改：
-
-```text
-PUT /places/{id}
-```
-
-删除：
-
-```text
+GET    /places
+GET    /places/{id}
+POST   /places
+PUT    /places/{id}
 DELETE /places/{id}
 ```
+
+已有项目存在明确统一约定时，优先保持现有风格。
 
 ---
 
 # 3. 业务动作
 
-对于无法自然表达为 CRUD 的业务动作，可以使用明确的动作路径。
+无法自然表达为 CRUD 的业务动作，可以使用明确动作路径。
 
 例如：
 
@@ -124,21 +108,13 @@ DELETE
 → 删除
 ```
 
-不得为了实现方便把所有接口都设计成：
-
-```text
-POST
-```
-
-但如果现有项目已经有统一 API 约定，应优先保持现有风格。
+不得为了实现方便把所有接口都设计成 POST。
 
 ---
 
 # 5. GET 请求
 
-GET 用于读取数据。
-
-GET 请求原则上：
+GET 用于读取数据，原则上：
 
 * 不改变业务状态；
 * 不创建数据；
@@ -157,7 +133,7 @@ GET /places/{id}/approve
 
 # 6. Request 模型
 
-复杂接口应使用明确的 Request 对象。
+复杂接口应使用明确 Request 对象。
 
 例如：
 
@@ -171,14 +147,6 @@ public class PlaceAuditRequest {
     private String remark;
 }
 ```
-
-不要为了减少一个类大量使用：
-
-```java
-Map<String, Object>
-```
-
-表达业务请求。
 
 Request 名称应表达具体用途：
 
@@ -197,7 +165,15 @@ CommonRequest
 DataRequest
 ```
 
-如果一个 Request 同时承担多个完全不同接口的输入，应考虑拆分。
+不要为了减少一个类大量使用：
+
+```java
+Map<String, Object>
+```
+
+表达普通业务请求。
+
+如果一个 Request 同时承担多个完全不同接口的输入，应评估拆分。
 
 ---
 
@@ -236,25 +212,18 @@ placeCode
 原则：
 
 ```text
-Database
-拼音
-   ↓
-防腐层
-   ↓
-API
-英文业务语义
+Database（拼音）
+      ↓
+   防腐边界
+      ↓
+API（英文业务语义）
 ```
 
 ---
 
-# 8. Response / VO
+# 8. VO 与通用 Response
 
-对外返回优先使用明确的：
-
-```text
-Response
-VO
-```
+具体业务接口输出统一优先使用 VO。
 
 例如：
 
@@ -267,6 +236,45 @@ public class PlaceDetailVO {
 
     private PlaceStatus status;
 }
+```
+
+默认模型语义：
+
+```text
+Request
+→ API 输入
+
+VO
+→ 具体业务视图输出
+
+Response
+→ 通用 HTTP 响应包装概念
+```
+
+因此，具体业务视图模型优先使用：
+
+```text
+PlaceVO
+PlaceDetailVO
+PlaceStatsVO
+PlaceTreeNodeVO
+```
+
+而不是新增：
+
+```text
+PlaceResponse
+PlaceStatsResponse
+place.response.*
+```
+
+通用 HTTP 包装仍可使用项目已有：
+
+```text
+AjaxResult
+Result<T>
+ApiResponse<T>
+PageResponse<T>
 ```
 
 禁止直接返回数据库 DO：
@@ -284,13 +292,19 @@ public PlaceDO detail(...) {
 * 数据库变化可能直接破坏 API；
 * API 生命周期与数据库模型生命周期不同。
 
+不得为了统一命名擅自重命名已经发布的历史 `*Response` API 模型；兼容性优先于规范迁移。
+
+模型分类与 Package 归属详细读取：
+
+- [java.md](../coding/java.md)
+
 ---
 
 # 9. 返回字段最小化
 
 只返回客户端真正需要的数据。
 
-不要因为 DO 中存在字段，就全部复制到 Response。
+不要因为 DO 中存在字段，就全部复制到 VO。
 
 尤其注意：
 
@@ -352,11 +366,7 @@ Controller 使用：
 编号格式必须正确
 ```
 
-适合：
-
-```text
-Bean Validation
-```
+适合 Bean Validation。
 
 业务校验：
 
@@ -367,11 +377,7 @@ Bean Validation
 案件是否已经提交
 ```
 
-应放在：
-
-```text
-Service / Manager
-```
+应放在 Service / Manager。
 
 不要把复杂业务判断写成 Bean Validation 注解。
 
@@ -404,7 +410,7 @@ Body 用于复杂业务输入：
 
 ---
 
-# 13. 查询对象
+# 13. Query 对象
 
 查询条件较多时，应使用 Query 对象。
 
@@ -421,26 +427,17 @@ public class PlaceQuery {
 }
 ```
 
-避免：
-
-```java
-list(
-    String name,
-    String status,
-    String centerCode,
-    String type,
-    LocalDateTime startTime,
-    LocalDateTime endTime
-)
-```
-
-更不要使用：
+避免大量方法参数，也不要使用：
 
 ```java
 Map<String, Object>
 ```
 
 承载普通业务查询条件。
+
+Query 的模型语义和 Package 归属读取：
+
+- [java.md](../coding/java.md)
 
 ---
 
@@ -466,7 +463,15 @@ current
 pageNum
 ```
 
-如果项目已经存在统一分页返回结构，应直接复用。
+如果项目已经存在统一分页返回结构，例如：
+
+```text
+PageResponse<T>
+```
+
+应直接复用。
+
+`PageResponse<T>` 属于通用 HTTP 分页包装，不等同于具体业务 VO。
 
 ---
 
@@ -483,16 +488,9 @@ id DESC
 
 不要依赖数据库默认返回顺序。
 
-如果允许客户端指定排序字段：
+如果允许客户端指定排序字段，排序字段必须通过白名单映射。
 
-> 排序字段必须通过白名单映射。
-
-禁止直接将用户输入拼接到 SQL：
-
-```text
-sortField
-sortOrder
-```
+禁止直接将用户输入拼接到 SQL。
 
 ---
 
@@ -521,9 +519,7 @@ null
 null
 ```
 
-但应遵循现有 API 契约。
-
-不要随意改变已有接口的 Null 语义。
+但应遵循现有 API 契约，不要随意改变已有接口 Null 语义。
 
 ---
 
@@ -540,7 +536,7 @@ editable
 auditable
 ```
 
-避免 API 中：
+避免 API 中机械使用：
 
 ```text
 isEnabled
@@ -565,17 +561,11 @@ REJECTED
 
 或者项目统一定义的稳定编码。
 
-不要直接使用页面展示名称：
-
-```text
-待审核
-审核通过
-审核不通过
-```
-
-作为不可变接口协议，除非项目明确如此设计。
+不要直接使用页面展示名称作为不可变接口协议，除非项目明确如此设计。
 
 展示文本与业务枚举应适当分离。
+
+不得自行创造新的枚举值、别名或兼容输入。
 
 ---
 
@@ -603,8 +593,6 @@ sj
 
 时间格式必须遵循项目统一约定。
 
-不得在不同接口中随意使用不同时间格式。
-
 涉及跨时区场景时，必须明确：
 
 * 时间代表的时区；
@@ -617,17 +605,7 @@ sj
 
 资源 ID 应保持稳定类型。
 
-例如接口已经使用：
-
-```text
-String
-```
-
-就不要无明确需求改成：
-
-```text
-Long
-```
+例如接口已经使用 String，就不要无明确需求改成 Long。
 
 不要因为数据库主键类型变化就直接改变 API ID 类型。
 
@@ -639,13 +617,8 @@ API 与数据库之间允许存在转换。
 
 如果项目已经存在：
 
-```java
-AjaxResult
-```
-
-或者：
-
 ```text
+AjaxResult
 Result<T>
 ApiResponse<T>
 ```
@@ -660,7 +633,15 @@ CommonResponse
 ApiResult
 ```
 
-统一响应属于项目级契约。
+统一 Response 属于项目级 HTTP 契约，与业务 VO 是两个不同概念：
+
+```text
+业务数据
+→ VO
+
+HTTP 通用包装
+→ Response / Result
+```
 
 ---
 
@@ -690,9 +671,7 @@ PERMISSION_DENIED
 
 # 23. 错误信息
 
-错误信息应便于调用方理解。
-
-但不得暴露：
+错误信息应便于调用方理解，但不得暴露：
 
 * SQL；
 * 数据库表名；
@@ -719,29 +698,18 @@ exception.getMessage()
 常见语义：
 
 ```text
-200
-请求成功
-
-400
-请求参数错误
-
-401
-未认证
-
-403
-无权限
-
-404
-资源不存在
-
-409
-状态冲突 / 资源冲突
-
-500
-服务端异常
+200  请求成功
+400  请求参数错误
+401  未认证
+403  无权限
+404  资源不存在
+409  状态冲突 / 资源冲突
+500  服务端异常
 ```
 
 不要在单个接口自行发明新的状态码使用方式。
+
+Service / Manager 不负责直接选择 HTTP 状态码，具体边界读取 Spring 规范。
 
 ---
 
@@ -754,7 +722,8 @@ API 是外部契约。
 * URL；
 * HTTP Method；
 * Request 字段名称；
-* Response 字段名称；
+* VO / 已发布输出字段名称；
+* 通用响应包装结构；
 * 字段类型；
 * Null 语义；
 * 枚举值；
@@ -762,11 +731,13 @@ API 是外部契约。
 * 错误码；
 * 分页结构。
 
+规范命名不能成为破坏现有 API 的理由。
+
 ---
 
 # 26. 新增字段
 
-Response 新增可选字段通常比：
+VO 新增可选字段通常比：
 
 ```text
 删除字段
@@ -850,11 +821,7 @@ name
 * 条件 UPDATE；
 * 已处理记录。
 
-不要看到 POST 就默认：
-
-```text
-一定不需要幂等
-```
+不要看到 POST 就默认一定不需要幂等。
 
 ---
 
@@ -871,9 +838,7 @@ dataScope
 
 不得默认可信。
 
-用户身份和权限信息应优先来自服务端可信上下文。
-
-例如：
+用户身份和权限信息应优先来自服务端可信上下文，例如：
 
 ```text
 currentOperator()
@@ -967,14 +932,12 @@ SecurityContext
 
 不要为了模块间调用自己项目内部能力，就机械增加 HTTP API。
 
-例如：
-
 推荐：
 
 ```text
 CaseService
     ↓
-PlaceService
+PlaceService / PlaceFacade
 ```
 
 而不是：
@@ -1004,21 +967,21 @@ public AjaxResult audit(
         @Valid @RequestBody PlaceAuditRequest request) {
 
     placeService.audit(id, request, currentOperator());
-
     return AjaxResult.success();
 }
 ```
 
-Controller 只表达接口边界。
+查询类接口可以返回业务 VO 或项目统一响应包装后的 VO，例如：
 
-不要把：
+```text
+PlaceVO
+AjaxResult<PlaceVO>
+PageResponse<PlaceVO>
+```
 
-* 数据库查询；
-* 状态判断；
-* 事务；
-* 复杂模型组装；
+具体以项目已有统一接口风格为准。
 
-全部放进 Controller。
+Controller 不承载数据库查询、状态判断、事务或复杂模型组装。
 
 具体分层规范读取：
 
@@ -1031,15 +994,16 @@ Controller 只表达接口边界。
 新增或修改 API 前检查：
 
 1. 项目是否已经存在类似接口。
-2. 是否能够复用已有 Request / VO / Response。
-3. URL 和 HTTP Method 是否符合现有约定。
-4. 是否会影响已有调用方。
-5. 是否改变已有字段语义。
-6. 是否需要参数校验。
-7. 是否需要权限校验。
-8. 是否存在幂等问题。
-9. 是否泄漏数据库或内部模型。
-10. 是否需要补充测试。
+2. 是否能够复用已有 Request / VO / 通用 Response 包装。
+3. 具体业务输出是否正确使用 VO。
+4. URL 和 HTTP Method 是否符合现有约定。
+5. 是否会影响已有调用方。
+6. 是否改变已有字段语义。
+7. 是否需要参数校验。
+8. 是否需要权限校验。
+9. 是否存在幂等问题。
+10. 是否泄漏数据库或内部模型。
+11. 是否需要补充测试。
 
 ---
 
@@ -1049,8 +1013,11 @@ Controller 只表达接口边界。
 
 * Controller 是否直接调用 Mapper；
 * Request 是否职责明确；
+* 具体业务输出是否使用 VO；
+* 是否错误新增 `*Response` 作为具体业务视图模型；
+* 是否复用了已有通用响应包装；
 * 是否使用 `Map<String, Object>` 代替业务对象；
-* DO 是否直接作为 Response；
+* DO 是否直接作为接口输出；
 * 数据库拼音是否泄漏到 API；
 * 是否暴露无关或敏感字段；
 * 参数校验是否完整；
@@ -1064,5 +1031,4 @@ Controller 只表达接口边界。
 
 最终原则：
 
-> API 表达稳定的业务契约，而不是数据库和内部实现的镜像。
-
+> API 表达稳定业务契约；Request 管输入，VO 管具体业务输出，Response 管通用 HTTP 包装，数据库和内部实现不得直接泄漏到接口边界。
