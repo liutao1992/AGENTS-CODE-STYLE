@@ -4,11 +4,11 @@
 
 相关规范：
 
-- [应用分层](../architecture/layering.md)
+- [应用分层与模型边界](../architecture/layering.md)
 - [事务](../architecture/transactions.md)
 - [并发](../architecture/concurrency.md)
 - [API 设计](../api/api-design.md)
-- [Java 编码与模型](java.md)
+- [Java 编码](java.md)
 
 核心原则：
 
@@ -460,9 +460,16 @@ ApiResponse<T>
 
 不得为了统一命名擅自修改已经发布的公共 API；现有历史 `*Response` 模型仅在当前任务明确要求或兼容性允许时迁移。
 
-详细模型规则读取：
+模型职责与 Package 归属读取：
 
-- [java.md](java.md)
+- [layering.md](../architecture/layering.md#9-模型分类与-package-归属)
+
+Java 实现方式读取：
+
+- [java.md](java.md#3-模型对象的-java-实现)
+
+API 契约读取：
+
 - [api-design.md](../api/api-design.md)
 
 ---
@@ -839,11 +846,12 @@ AOP
 5. 检查是否真的需要 Manager。
 6. 检查是否真的需要事务。
 7. 检查是否引入 HTTP 语义到 Service / Manager。
-8. 检查具体业务输出是否正确使用 VO，是否直接暴露 DO。
-9. 检查统一响应包装是否遵循目标项目；仅在项目没有既有约定时采用 `ApiResponse<T>` 默认方案。
-10. 检查是否存在不必要的 Spring Bean 或抽象。
-11. 检查完整调用链。
-12. 执行相关测试。
+8. 涉及 Request / Query / DTO / BO / DO / VO 或 Package 时，按 `layering.md` 检查职责与归属。
+9. 检查具体业务输出是否正确使用 VO，是否直接暴露 DO。
+10. 检查统一响应包装是否遵循目标项目；仅在项目没有既有约定时采用 `ApiResponse<T>` 默认方案。
+11. 检查是否存在不必要的 Spring Bean 或抽象。
+12. 检查完整调用链。
+13. 执行相关测试。
 
 ---
 
@@ -874,9 +882,10 @@ AOP
 * DO 是否直接作为 API 输出；
 * 具体业务输出是否使用 VO；
 * 是否错误新增 `*Response` 作为业务视图模型；
+* Request / Query / DTO / BO / DO / VO 的职责和 Package 是否符合 `layering.md`；
+* 模型 Java 实现是否符合 `java.md`；
 * 默认新接口是否使用 `ApiResponse<T>`，或者是否有明确的项目级统一响应约定；
 * 是否为了迁移到 `ApiResponse<T>` 擅自破坏已有响应契约；
-* Request / Query / DTO / BO / DO / VO 是否职责明确；
 * 输入标准化是否改变业务语义。
 
 ### Spring 基础设施
@@ -903,4 +912,4 @@ AOP
 
 最终原则：
 
-> Controller 只处理接口边界，Service 表达业务流程，Manager 承担真正需要复用或原子化的能力；具体业务输出使用 VO，统一响应默认使用 `ApiResponse<T>` 但以目标项目既有约定为准；HTTP 语义止于 Web 层，业务规则必须有依据，事务和并发必须有真实需求。
+> Controller 只处理接口边界，Service 表达业务流程，Manager 承担真正需要复用或原子化的能力；模型职责与 Package 由分层规范统一定义，Java 规范只负责实现方式；具体业务输出使用 VO，统一响应默认使用 `ApiResponse<T>` 但以目标项目既有约定为准；HTTP 语义止于 Web 层，业务规则必须有依据，事务和并发必须有真实需求。
