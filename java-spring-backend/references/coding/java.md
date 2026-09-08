@@ -916,21 +916,93 @@ Objects.equals(a, b)
 
 ---
 
-### 6.3 空集合优先于 Null
+### 6.3 空集合优先于 Null，并依赖明确契约
 
-当空集合能够准确表达“没有结果”时，优先返回空集合：
+当空集合能够准确表达“没有结果”时，集合返回值优先使用空集合，而不是 `null`。
+
+例如：
 
 ```java
 return Collections.emptyList();
 ```
 
-而不是：
+或者：
 
 ```java
-return null;
+return List.of();
 ```
 
-但已有 API 或调用契约对 Null 有明确语义时，不得擅自改变。
+但更重要的是：**一旦下层方法已经具有明确的非 Null 集合契约，上层应直接依赖该契约，不再机械增加 Null 防御。**
+
+例如下层明确保证：
+
+```java
+List<AssetDO> listAssets(...);
+```
+
+无结果返回空集合，则调用方可以直接：
+
+```java
+List<AssetDO> assets = assetRepository.listAssets(...);
+return assets.stream()
+        .map(...)
+        .toList();
+```
+
+不要无依据增加：
+
+```java
+List<AssetDO> safeAssets = assets == null
+        ? new ArrayList<>()
+        : assets;
+```
+
+也不要为了“更安全”机械包装：
+
+```java
+Optional.ofNullable(assets)
+        .orElseGet(Collections::emptyList);
+```
+
+或者：
+
+```java
+if (assets != null) {
+    ...
+}
+```
+
+这些写法会让调用方错误地认为正常契约可能返回 Null，并把防御代码扩散到每一层。
+
+如果数据来源确实允许 Null，例如：
+
+* 第三方 SDK；
+* 外部 HTTP / RPC 响应；
+* 遗留接口；
+* 明确声明 nullable 的内部契约；
+
+应在最靠近来源、最了解该技术差异的边界归一化一次：
+
+```java
+List<VendorItem> items = response.getItems();
+return items == null ? List.of() : items;
+```
+
+然后由上层依赖稳定的非 Null 集合契约，不在 Manager / Service / Controller 继续重复：
+
+```text
+items == null ? emptyList : items
+```
+
+已有 API 或调用契约对 Null 具有明确独立语义时，不得擅自改变；单对象查询的 Null / Optional / 异常语义也应按其自身契约判断，不能套用集合规则。
+
+原则：
+
+> 先确认来源契约；集合无结果优先使用空集合；确实存在 Null 差异时在边界归一化一次，上层不层层猜测和兜底。
+
+MyBatis 集合查询的具体规则读取：
+
+- [mybatis.md](mybatis.md#61-集合查询的-null-契约)
 
 ---
 
@@ -1160,6 +1232,8 @@ putAll(...)
 
 不要依赖集合实现抛出 NPE 来表达业务校验。
 
+如果参数来源已经具有明确非 Null 集合契约，也不要为了“防御”再次机械包装为空集合；应直接依赖契约。
+
 ---
 
 ### 8.11 Map 遍历
@@ -1194,6 +1268,8 @@ placeMap.forEach((key, value) -> {
 * 并发安全；
 
 应显式选择能够保证该语义的数据结构。
+
+集合本身是否允许为 Null，应优先由方法契约或数据来源边界明确，不在每个调用点各自猜测。
 
 ---
 
@@ -1632,7 +1708,11 @@ throw new BusinessException("Failed to load place", ex);
 
 具体异常类型必须优先复用目标项目已有异常体系，不得为了示例创建平行异常层级。
 
-Spring / HTTP 异常边界读取：
+异常跨层转换、记录和 Web/API 收口读取：
+
+- [error-handling.md](../architecture/error-handling.md)
+
+Spring 框架中的 Advice / Handler 实现读取：
 
 - [spring.md](spring.md)
 
@@ -1790,7 +1870,7 @@ log.error(ex.getMessage());
 
 异常在哪一层转换、在哪一层记录完整现场，读取：
 
-- [分层异常处理规约](../architecture/layering.md#71-分层异常处理规约)
+- [异常处理与错误边界](../architecture/error-handling.md)
 
 ---
 
@@ -1865,7 +1945,7 @@ ControllerAdvice log.error
 
 ```text
 access
- audit
+audit
 monitor
 stats
 security
@@ -2180,7 +2260,7 @@ Codex 修改 Java 代码时必须：
 14. 不机械创建 `Service + ServiceImpl`。
 15. 不引入无依据的魔法状态、默认值或枚举值。
 16. 使用包装类型时检查 Null 语义，避免自动拆箱 NPE。
-17. 使用集合时检查可变性、视图、泛型、顺序和相等性语义。
+17. 使用集合时检查可变性、视图、泛型、顺序和 Null 契约；已有明确非 Null 集合契约时，不机械增加 `list == null`、`Optional.ofNullable(list)` 或空集合兜底；来源确实允许 Null 时在边界归一化一次。
 18. 数值计算时检查精度、比较和舍入规则。
 19. 控制复杂条件和嵌套，优先提高可读性而不是追求代码行数最少。
 20. 新建或显著修改的方法默认控制在 80 行以内；超过时必须检查职责和拆分价值。
@@ -2193,4 +2273,4 @@ Codex 修改 Java 代码时必须：
 
 最终原则：
 
-> 架构规范决定“类是什么、放哪里”；Java 规范决定“类在 Java 中如何实现”。Java 编程风格优先追求清晰、类型安全、Null 安全、精度正确和维护成本可控，并始终以目标项目已有契约和合理一致性为优先。
+> 架构规范决定“类是什么、放哪里”；Java 规范决定“类在 Java 中如何实现”。Java 编程风格优先追求清晰、类型安全、稳定契约、Null 安全、精度正确和维护成本可控，并始终以目标项目已有契约和合理一致性为优先。
