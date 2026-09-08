@@ -117,7 +117,8 @@ Bean Validation / @Valid
 依赖注入
 Spring Bean 生命周期
 @ConfigurationProperties
-@Transactional / @Async / @Cacheable 的代理行为
+@Transactional / TransactionTemplate 的 Spring 实现机制
+@Async / @Cacheable 的代理行为
 @RestControllerAdvice / @ExceptionHandler
 ```
 
@@ -252,6 +253,8 @@ Schema 兼容
 
 ```text
 @Transactional 是否需要
+TransactionTemplate / 编程式事务
+Service 事务外准备 / Manager 原子事务
 事务范围
 传播
 隔离级别
@@ -259,8 +262,11 @@ Schema 兼容
 条件更新
 乐观锁 / 悲观锁
 一致性快照
-回滚
+rollbackFor / 回滚
+长事务
 ```
+
+涉及 `@Transactional` Proxy 或 `TransactionTemplate` Spring API 细节时再加载 Spring。
 
 不要因为存在 Mapper 写操作就自动加载并引入事务设计。
 
@@ -375,6 +381,12 @@ Mock / Testcontainers
 修复事务回滚问题
 → 事务 + 必要的异常处理
 
+Service 中只有一小段数据库操作需要事务，考虑 TransactionTemplate
+→ 事务 + Spring
+
+Service 准备数据后由 Manager 收口多个原子写操作
+→ 事务 + 必要的分层
+
 新增 CompletableFuture 数据库查询
 → 并发 + 必要的事务
 
@@ -405,7 +417,7 @@ Mock / Testcontainers
 - 通用 MyBatis TypeHandler 属于 MyBatis 技术基础设施，不因业务 Mapper 使用就放入业务 `mapper`。
 - 具体业务输出优先使用 `*VO`；统一 HTTP 响应默认推荐 `ApiResponse<T>`，但目标项目已有响应契约时以项目为准，不无授权迁移历史 API。
 - 普通业务模型默认使用普通 `class` 和项目现有 Lombok 风格；不为了减少样板代码主动换成 `record`。
-- 普通业务方法参数默认不超过 5 个；超过时优先检查职责并封装真实语义对象。普通查询条件超过 3 个优先评估 Query，不使用 `Map<String, Object>` 机械兜底。
+- 普通业务方法参数默认不超过 5 个；超过时先判断参数是否共同描述一次完整操作。来源、生命周期和信任边界一致时，优先封装为一个语义完整对象；职责或信任边界不同则保持分离，不为了凑参数数量机械拆成多个参数对象。普通查询条件超过 3 个优先评估 Query，不使用 `Map<String, Object>` 机械兜底。
 - 数据库物理命名与 Java 英文业务语义通过 Mapper / ResultMap 隔离。
 - Client / Adapter 负责第三方协议细节；Manager 只有在存在真实应用级复用、组合或原子能力时才引入。
 - 请求绑定的当前用户 / 部门 / 租户等上下文优先在入站边界取得并按业务需要显式传递，不让 Service / Manager 无必要依赖 Web Request 或请求专用 ThreadLocal。
@@ -414,6 +426,7 @@ Mock / Testcontainers
 - 已声明必填或非空的字段不得通过 `""`、`0`、默认编码、默认状态等无依据兜底掩盖非法输入；只有既有契约明确要求时才允许默认行为。
 - 集合无结果优先使用空集合表达；已有明确非 Null 集合契约时，上层不再机械增加 Null 防御。外部或遗留来源确实允许 Null 时，在最靠近来源的边界归一化一次，再让上层依赖稳定契约。
 - 标准 MyBatis `List<T>` 集合查询无匹配记录按空集合处理；不要在 Service / Manager 中无依据重复 `list == null ? emptyList : list`。
+- 事务先判断真实一致性边界。能在 Service 完成事务外数据准备、由 Manager 收口原子数据库操作时优先缩短事务；跨多个 Manager 必须整体提交时事务提升到 Service。方法级边界清晰时优先 `@Transactional(rollbackFor = Exception.class)`，只有局部代码块需要精确事务控制时再评估 `TransactionTemplate`，目标项目已有更具体事务契约时以项目为准。
 - SOLID 用于解决真实职责和依赖问题，不用于机械创建 `Interface + Impl`、Strategy、Factory、Repository 或额外层级。
 
 ---
