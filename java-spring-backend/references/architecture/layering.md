@@ -6,15 +6,22 @@
 
 * 明确各层职责；
 * 控制跨层依赖；
-* 避免业务逻辑散落；
+* 明确模型分类与 Package 归属；
+* 避免业务逻辑和模型职责散落；
 * 使用 SOLID 辅助判断职责、依赖和扩展边界；
 * 避免为了架构形式增加无意义层级和抽象。
 
-模型分类、数据库映射、事务和并发分别由对应专项规范维护，本文不重复展开。
+本文负责回答：
+
+> 一个类是什么职责、属于哪个架构边界、应该放在哪个 Package。
+
+Java 语法、Lombok、`class` / `record`、集合、异常和日志等实现细节由 Java 编码规范维护。
 
 相关规范：
 
-- [Java 模型与编码](../coding/java.md)
+- [Java 编码](../coding/java.md)
+- [Spring](../coding/spring.md)
+- [API 设计](../api/api-design.md)
 - [MyBatis](../coding/mybatis.md)
 - [事务](transactions.md)
 - [并发](concurrency.md)
@@ -221,7 +228,7 @@ FaceRecognitionClient
 VendorFaceRecognitionClient
 ```
 
-而不是让业务 Service 到处理解第三方 SDK 的对象、异常和调用协议。
+而不是让业务 Service 直接理解第三方 SDK 的对象、异常和调用协议。
 
 但依赖倒置不意味着所有类都必须采用：
 
@@ -233,7 +240,7 @@ XxxServiceImpl
 
 如果只有一个稳定实现，也不存在替换、隔离或多实现需求，不得为了符合 SOLID 机械创建接口和实现类。
 
-本项目 Mapper 通常已经通过接口形成数据访问边界，不需要仅为了 DIP 再包装无实际价值的 Repository / RepositoryImpl。
+项目中的 Mapper 通常已经通过接口形成数据访问边界，不需要仅为了 DIP 再包装无实际价值的 Repository / RepositoryImpl。
 
 ---
 
@@ -306,22 +313,29 @@ Controller 负责系统接口边界。
 * 承载复杂业务逻辑；
 * 直接操作数据库对象完成业务流程。
 
-推荐：
+默认示例：
 
 ```java
 @PostMapping("/{id}/audit")
-public AjaxResult audit(
+public ApiResponse<Void> audit(
         @PathVariable String id,
         @Valid @RequestBody PlaceAuditRequest request) {
 
     placeService.audit(id, request, currentOperator());
-    return AjaxResult.success();
+    return ApiResponse.success();
 }
 ```
+
+`ApiResponse<T>` 只是本 Skill 的默认统一响应示例；目标项目已有其他统一响应类型、历史 API 或序列化契约时，以项目现有约定为准。
 
 原则：
 
 > Controller 保持轻量，只表达 HTTP 接口边界。
+
+具体 HTTP 和响应契约读取：
+
+- [spring.md](../coding/spring.md)
+- [api-design.md](../api/api-design.md)
 
 ---
 
@@ -523,18 +537,539 @@ PlaceMapper
 
 ---
 
-# 9. 模型边界
+# 9. 模型分类与 Package 归属
 
-模型分类与 Package 归属统一由 Java 编码规范维护：
+模型属于应用架构边界的一部分，因此统一在本文定义。
+
+默认模型体系：
+
+```text
+Request
+→ 接口输入模型
+
+Query
+→ 查询条件模型
+
+DTO
+→ 应用内部数据传输模型
+
+BO
+→ 业务处理模型
+
+DO
+→ 持久化数据模型
+
+VO
+→ 视图输出模型
+```
+
+不同模型职责不同，不得因为“都是保存字段的 Java 类”就统一放入 `dto`。
+
+Java 层面的 Lombok、`class` / `record`、Getter / Setter 等实现方式读取：
 
 - [java.md](../coding/java.md)
 
-本文只强调：
+---
 
-* 不直接把数据库 DO 当作 HTTP 输出；
-* 不为了分层形式机械创建 DTO / BO / Converter；
-* 模型职责发生变化时再进行转换；
-* 数据库模型与 Java/API 的隔离由对应 Java、MyBatis 和数据库规范负责。
+## 9.1 Request
+
+Request 表达接口输入。
+
+例如：
+
+```text
+PlaceCreateRequest
+PlaceUpdateRequest
+PlaceAuditRequest
+```
+
+默认 Package：
+
+```text
+<module>.request
+```
+
+例如：
+
+```text
+place.request.PlaceCreateRequest
+place.request.PlaceUpdateRequest
+place.request.PlaceAuditRequest
+```
+
+典型边界：
+
+```text
+HTTP Request
+      ↓
+Request
+      ↓
+Controller
+      ↓
+Service
+```
+
+Request 可以承载接口结构性校验，但不承担：
+
+* 数据库存储职责；
+* 查询结果职责；
+* 视图输出职责；
+* 复杂业务行为。
+
+接口校验详细规则读取：
+
+- [spring.md](../coding/spring.md)
+- [api-design.md](../api/api-design.md)
+
+---
+
+## 9.2 Query
+
+Query 表达查询条件。
+
+例如：
+
+```text
+PlaceQuery
+PersonQuery
+CaseQuery
+```
+
+默认 Package：
+
+```text
+<module>.query
+```
+
+例如：
+
+```text
+place.query.PlaceQuery
+```
+
+Query 可以在：
+
+```text
+Controller
+    ↓
+Service
+    ↓
+Mapper
+```
+
+之间传递查询条件。
+
+Query 不属于 DTO，也不得因为 Mapper 使用它就放入：
+
+```text
+<module>.mapper
+```
+
+禁止：
+
+```text
+place.dto.PlaceQuery
+place.mapper.PlaceQuery
+```
+
+应使用：
+
+```text
+place.query.PlaceQuery
+```
+
+普通业务查询条件较多时，可使用 Query 对象；具体参数规则读取 Java 和 MyBatis 规范。
+
+---
+
+## 9.3 DTO
+
+DTO 表达应用内部的数据传输。
+
+默认 Package：
+
+```text
+<module>.dto
+```
+
+DTO 只有在确实存在独立的数据传输职责时才创建，例如：
+
+```text
+Service
+   ↓
+Manager
+```
+
+或者：
+
+```text
+模块 A
+   ↓
+模块 B 的应用接口
+```
+
+不得把 DTO 当作所有数据对象的统一目录。
+
+禁止仅因为类包含字段就机械创建：
+
+```text
+PlaceCreateDTO
+PlaceResponseDTO
+PlaceQueryDTO
+```
+
+如果模块没有真实 DTO 需求：
+
+```text
+<module>.dto
+```
+
+可以不存在。
+
+---
+
+## 9.4 BO
+
+BO 表达业务处理过程中形成的业务对象。
+
+默认 Package：
+
+```text
+<module>.bo
+```
+
+例如：
+
+```text
+AuditResultBO
+PlaceRegistrationBO
+```
+
+只有业务逻辑确实需要独立于 Request、Query、DO、VO 的中间业务模型时，才创建 BO。
+
+不得机械执行：
+
+```text
+Request
+   ↓
+DTO
+   ↓
+BO
+   ↓
+DO
+   ↓
+BO
+   ↓
+VO
+```
+
+简单业务允许：
+
+```text
+Request
+   ↓
+Service
+   ↓
+DO
+   ↓
+VO
+```
+
+原则：
+
+> 没有真实职责，就不要增加中间模型。
+
+---
+
+## 9.5 DO
+
+DO 表达数据库持久化数据。
+
+例如：
+
+```text
+PlaceDO
+PersonDO
+CaseDO
+```
+
+默认 Package：
+
+```text
+<module>.domain
+```
+
+例如：
+
+```text
+place.domain.PlaceDO
+```
+
+DO 使用 Java 英文业务语义。
+
+数据库可以使用拼音：
+
+```text
+csxx
+csbh
+csmc
+```
+
+Java 使用英文：
+
+```text
+PlaceDO
+placeCode
+placeName
+```
+
+数据库与 Java 之间通过 MyBatis 建立显式映射：
+
+```text
+Database（拼音）
+       ↓
+Mapper / ResultMap
+       ↓
+DO（英文）
+```
+
+DO 不要求机械复制数据库表名。
+
+例如数据库表：
+
+```text
+ryxx
+```
+
+Java 可以使用：
+
+```text
+PersonDO
+```
+
+而不是：
+
+```text
+RyxxDO
+```
+
+映射详细规则读取：
+
+- [mybatis.md](../coding/mybatis.md)
+
+---
+
+## 9.6 VO
+
+VO 表达提供给视图层或客户端的具体业务输出数据。
+
+例如：
+
+```text
+PlaceVO
+PlaceStatsVO
+PlaceTreeNodeVO
+```
+
+默认 Package：
+
+```text
+<module>.vo
+```
+
+例如：
+
+```text
+place.vo.PlaceVO
+place.vo.PlaceStatsVO
+place.vo.PlaceTreeNodeVO
+```
+
+典型边界：
+
+```text
+Service
+   ↓
+VO
+   ↓
+Controller
+   ↓
+ApiResponse<VO>
+```
+
+具体业务返回模型优先使用 VO 表达。
+
+例如，如果：
+
+```text
+PlaceResponse
+```
+
+实际表达的是场所接口业务数据，新代码应优先使用：
+
+```text
+PlaceVO
+```
+
+并放入：
+
+```text
+place.vo
+```
+
+不应机械放入：
+
+```text
+place.dto
+place.response
+```
+
+原则：
+
+> VO 表达具体业务视图数据；统一 HTTP Response 包装不是业务模型分类。
+
+`ApiResponse<T>` 是统一响应包装的默认推荐；目标项目已有其他响应契约时，以项目为主。
+
+---
+
+## 9.7 通用模型
+
+只有真正与具体业务模块无关，并且能够被多个模块复用的结构，才能进入 `common`。
+
+例如通用：
+
+```text
+ApiResponse<T>
+分页包装
+通用错误结构
+```
+
+可以按照目标项目现有公共 Web 模型目录组织。
+
+而：
+
+```text
+PlaceVO
+PlaceStatsVO
+PlaceTreeNodeVO
+```
+
+具有明确 Place 业务语义，因此必须保留在业务模块中。
+
+不得因为多个 Controller 都可能使用，就移动到 `common`。
+
+原则：
+
+> 通用结构进入 common，具体业务模型留在对应业务模块。
+
+具体公共 Package 名称以目标项目已有约定为准，不为了本 Skill 新建第二套公共目录。
+
+---
+
+## 9.8 模型归属判断
+
+创建模型前必须先判断：
+
+```text
+这个对象是什么？
+        ↓
+接口输入？
+→ Request
+
+查询条件？
+→ Query
+
+内部数据传输？
+→ DTO
+
+业务处理中间对象？
+→ BO
+
+数据库持久化？
+→ DO
+
+视图输出？
+→ VO
+```
+
+不得根据：
+
+```text
+它只是保存字段
+```
+
+直接判断：
+
+```text
+它就是 DTO
+```
+
+也不得根据：
+
+```text
+当前正在开发 Place
+```
+
+推导：
+
+```text
+所有新类都放 place 下当前正在使用的 Package
+```
+
+Package 由类和模型的职责决定，不由当前任务所在目录决定。
+
+---
+
+## 9.9 创建模型前必须搜索
+
+新增：
+
+```text
+Request
+Query
+DTO
+BO
+DO
+VO
+```
+
+之前必须先搜索：
+
+1. 是否已经存在相同或类似模型；
+2. 当前模块是否已经存在统一 Package；
+3. 是否能够复用已有模型；
+4. 当前模型实际承担什么职责；
+5. 是否真的需要新的模型类型。
+
+禁止先把模型统一创建到：
+
+```text
+dto
+```
+
+然后再根据使用方式调整。
+
+创建流程：
+
+```text
+确定职责
+    ↓
+Request / Query / DTO / BO / DO / VO？
+    ↓
+搜索已有模型
+    ↓
+判断是否需要新增
+    ↓
+确定 Package
+    ↓
+读取 java.md 确定 Java 实现方式
+    ↓
+创建文件
+```
+
+---
+
+## 9.10 模型转换原则
 
 不要机械创建：
 
@@ -542,13 +1077,71 @@ PlaceMapper
 Request → DTO → BO → DO → BO → VO
 ```
 
+只有职责或边界真正发生变化时才进行转换。
+
+简单业务允许：
+
+```text
+Request
+   ↓
+Service
+   ↓
+DO
+   ↓
+VO
+```
+
 原则：
 
-> 模型跟随真实职责，不跟随形式化层级。
+> 不为了少写转换代码破坏模型边界，也不为了形式完整增加无意义模型。
 
 ---
 
-# 10. 事务与并发边界
+# 10. 技术基础设施的 Package 归属
+
+Package 由组件自身职责决定，不由当前使用它的业务模块决定。
+
+例如 MyBatis 通用技术组件：
+
+```text
+TypeHandler
+→ common.mybatis.handler
+
+Interceptor
+→ common.mybatis.interceptor
+
+Plugin
+→ common.mybatis.plugin
+
+Configuration
+→ common.mybatis.config
+```
+
+因此：
+
+```text
+JsonStringListTypeHandler
+```
+
+即使当前只被 `PlaceMapper` 使用，也不应因此放入：
+
+```text
+place.mapper
+```
+
+原则：
+
+> “当前模块需要这个类”不等于“这个类属于当前模块”。
+
+新增技术基础设施前必须搜索项目已有同类组件和 Package 约定。
+
+具体 MyBatis 规则读取：
+
+- [mybatis.md](../coding/mybatis.md)
+
+---
+
+# 11. 事务与并发边界
 
 事务边界由数据一致性需求决定，不由 Controller / Service / Manager / Mapper 的层级名称机械决定。
 
@@ -576,7 +1169,7 @@ Request → DTO → BO → DO → BO → VO
 
 ---
 
-# 11. 不要过度分层
+# 12. 不要过度分层
 
 简单业务优先：
 
@@ -622,24 +1215,35 @@ Factory
 Adapter
 ```
 
+也不要为了模型形式完整机械增加：
+
+```text
+DTO
+BO
+Converter
+Assembler
+```
+
 原则：
 
 > 先保持简单，真实复杂度出现后再增加对应抽象。
 
 ---
 
-# 12. Codex 编码检查
+# 13. Codex 编码检查
 
 编码前：
 
 1. 查看当前模块已有分层和调用关系。
 2. 找到至少一个类似实现。
-3. 判断逻辑属于 Controller、Service、Manager 还是 Mapper。
+3. 判断逻辑属于 Controller、Service、Manager、Mapper、模型还是技术基础设施。
 4. 判断是否已经存在可复用能力。
-5. 新增或调整类、接口、抽象时，确认存在真实职责、变化、替换或隔离需求。
-6. 涉及模型时读取 Java 规范，不在本文自行推导模型体系。
-7. 涉及事务、锁或一致性时读取事务规范。
-8. 涉及并发或跨线程时读取并发规范。
+5. 新增类前先确定职责，再确定 Package。
+6. 新增模型时按本文判断 Request / Query / DTO / BO / DO / VO，再读取 Java 规范确定实现方式。
+7. 新增技术组件时按技术职责确定 Package，不按当前业务使用者归属。
+8. 新增或调整类、接口、抽象时，确认存在真实职责、变化、替换或隔离需求。
+9. 涉及事务、锁或一致性时读取事务规范。
+10. 涉及并发或跨线程时读取并发规范。
 
 编码后检查：
 
@@ -648,7 +1252,13 @@ Adapter
 * Service 是否混入 HTTP、SQL 或第三方协议细节；
 * Mapper 是否包含业务判断；
 * 是否跨模块直接访问其他模块 Mapper；
-* 是否创建无实际价值的 Manager / Facade / Repository / Converter；
+* Request / Query / DTO / BO / DO / VO 是否按真实职责归类；
+* Package 是否由职责决定，而不是由当前任务目录决定；
+* 具体业务输出是否错误使用 `*Response` / `response` 包而不是 VO；
+* 是否把所有数据模型机械放入 `dto`；
+* 是否创建无实际价值的 DTO / BO / Converter / Manager / Facade / Repository；
+* 技术基础设施是否错误放入业务 Mapper 等 Package；
+* 数据库拼音是否越过 Mapper 映射边界泄漏到 Java 业务模型；
 * 一个类是否同时承担多个明显不同职责，违反 SRP；
 * 新增扩展点是否来自真实变化需求，而不是为了套用 OCP；
 * 子类或实现是否改变抽象类型核心契约，违反 LSP；
@@ -661,4 +1271,4 @@ Adapter
 
 最终原则：
 
-> 分层用于明确职责和依赖方向，SOLID 用于辅助判断真实设计问题；两者都不能成为过度设计的理由。
+> 先确定职责，再确定 Package；分层和模型边界负责“类是什么、放哪里”，Java 规范负责“类怎么写”，SOLID 只用于解决真实设计问题。
