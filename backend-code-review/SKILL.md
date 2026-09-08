@@ -46,7 +46,7 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 | --- | --- | --- |
 | Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、Lombok、Null、集合、异常实现、日志、格式、注释 |
 | 分层、模型、Package、SOLID、跨模块、入站/出站 | [分层](../java-spring-backend/references/architecture/layering.md) | 职责、依赖方向、模型归属、技术组件归属、过度设计 |
-| Spring 框架使用 | [Spring](../java-spring-backend/references/coding/spring.md) | DI、Bean、Validation、Proxy、Advice、Spring 注解机制 |
+| Spring 框架使用 | [Spring](../java-spring-backend/references/coding/spring.md) | DI、Bean、Validation、重复结构校验、默认兜底、Proxy、Advice、Spring 注解机制 |
 | HTTP API | [API](../java-spring-backend/references/api/api-design.md) | URL、Method、Request/VO、统一响应、错误契约、兼容、分页、幂等 |
 | 异常跨层流转 | [异常处理](../java-spring-backend/references/architecture/error-handling.md) | 转换边界、cause、日志归属、重复记录、对外泄漏 |
 | MyBatis 映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md) | Mapper、XML、ResultMap、TypeHandler、参数绑定、动态 SQL |
@@ -117,11 +117,78 @@ record / class
 异常体系
 日志框架
 分页结构
+校验边界
 ```
 
 如果目标项目已有稳定契约或历史 API，以项目为主，不得仅为了迁移到 Skill 默认风格形成 finding。
 
 同样，不得把历史代码中的全仓库不一致扩大成本次审查问题；差异审查优先判断本次变更是否新增或加剧问题。
+
+---
+
+## 参数校验审查
+
+Bean Validation 和结构校验的详细规则统一读取 `spring.md`。
+
+重点检查两类问题。
+
+### 重复结构校验
+
+如果一个调用入口已经通过：
+
+```text
+@NotBlank / @NotNull / @Size / @Pattern
++
+@Valid 或项目等价机制
+```
+
+保证了结构性约束，而 Service / Manager 又对同一个字段机械执行完全相同的：
+
+```java
+StringUtils.hasText(...)
+Objects.requireNonNull(...)
+value == null
+value.isBlank()
+```
+
+应检查是否属于无意义重复。
+
+形成 finding 前必须确认：
+
+1. 当前 Service 调用路径确实经过可信校验边界；
+2. 业务层检查表达的不是另一个独立业务规则；
+3. Service 没有其他未校验入口要求其承担公共输入契约。
+
+不能只看到 `@NotBlank` 和 `hasText()` 同时存在就机械报错。
+
+### 无依据默认兜底
+
+对于已经声明必填、非空或固定格式的字段，如果业务层通过：
+
+```java
+StringUtils.hasText(value) ? value : ""
+value != null ? value : 0
+invalidStatus ? DEFAULT_STATUS : status
+```
+
+把非法输入转换成默认值，应检查是否未经契约创造了新的业务语义。
+
+重点关注：
+
+```text
+blank → ""
+null → 0
+blank → 默认编码
+非法状态 → 默认状态
+```
+
+如果默认行为没有需求、已有代码、API 契约或业务规则依据，可以形成有证据的维护性或功能性 finding。
+
+如果存在 HTTP、RPC、Consumer、Scheduled Task、跨模块调用等多入口，应优先指出真正缺失的入口校验或公共方法契约，不机械建议在每层再加一套校验。
+
+核心原则：
+
+> 结构校验只在合适的可信边界表达一次；业务层保留真正业务校验，不通过重复校验或默认值掩盖边界问题。
 
 ---
 
