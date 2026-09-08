@@ -58,6 +58,76 @@ Service
 
 不要机械规定所有事务只能存在某一层。
 
+## 2.1 谨慎使用 `@Transactional`
+
+不要因为一个方法位于 Service / Manager，或者方法中存在数据库写操作，就简单添加：
+
+```java
+@Transactional(rollbackFor = Exception.class)
+```
+
+然后认为事务问题已经解决。
+
+新增事务前必须先回答：
+
+```text
+哪些数据库操作必须作为一个整体成功或失败？
+事务从哪里开始、在哪里结束？
+事务中是否包含不需要锁和一致性保证的工作？
+是否存在远程调用、文件 IO、等待或长耗时计算？
+查询后修改是否仍然存在并发竞争？
+```
+
+事务注解只是实现事务边界的 Spring 机制，不能替代对一致性范围、并发和回滚语义的设计。
+
+原则：
+
+> 先确定一致性边界，再使用 `@Transactional`；不要先加注解，再倒推事务范围。
+
+## 2.2 优先收敛数据库操作
+
+同一个原子业务动作中，如果多个数据库操作可以在不破坏可读性、约束和并发语义的前提下合理合并，应优先减少不必要的数据库往返和事务持有时间。
+
+例如可以根据真实场景评估：
+
+```text
+多次逐条 INSERT
+→ Batch / 批量写入
+
+先 SELECT 再 UPDATE，且状态条件可直接表达
+→ 条件 UPDATE
+
+多个职责相同的重复查询
+→ 一次查询后复用结果
+```
+
+但“合并数据库操作”不等于：
+
+* 把多个无关业务写进一条巨大 SQL；
+* 为了减少 Mapper 调用破坏业务可读性；
+* 把不同一致性边界强行合并；
+* 绕过必要的唯一约束、锁或状态校验。
+
+事务方法中应尽量只保留与当前一致性边界直接相关的工作。
+
+推荐顺序：
+
+```text
+事务外：参数准备 / 不依赖事务的计算 / 可提前完成的外部读取
+                    ↓
+事务内：必要查询 / 业务一致性判断 / 必要数据库写入
+                    ↓
+事务提交
+                    ↓
+事务外：不要求与数据库原子提交的后续工作
+```
+
+不能为了“减少业务逻辑”把依赖数据库当前状态、锁或原子性的关键业务判断移出事务；是否移出必须以一致性语义为准。
+
+原则：
+
+> 减少事务内非必要工作，而不是减少必要业务规则；能在更短数据库路径内保证相同语义时，优先选择更短路径。
+
 ---
 
 # 3. Manager 层事务
@@ -67,7 +137,7 @@ Service
 例如：
 
 ```java
-@Transactional
+@Transactional(rollbackFor = Exception.class)
 public void auditPlace(...) {
     placeMapper.update(...);
     auditRecordMapper.insert(...);
@@ -100,7 +170,7 @@ Service 主要负责业务流程编排。
 例如：
 
 ```java
-@Transactional
+@Transactional(rollbackFor = Exception.class)
 public void registerCase(...) {
     caseManager.create(...);
     materialManager.register(...);
@@ -221,7 +291,7 @@ if (place.canAudit()) {
 仅仅增加：
 
 ```java
-@Transactional
+@Transactional(rollbackFor = Exception.class)
 ```
 
 并不一定能够解决问题。
@@ -389,7 +459,7 @@ public void process() {
     audit();
 }
 
-@Transactional
+@Transactional(rollbackFor = Exception.class)
 public void audit() {
 }
 ```
@@ -419,7 +489,7 @@ audit();
 禁止在事务中捕获异常后直接吞掉：
 
 ```java
-@Transactional
+@Transactional(rollbackFor = Exception.class)
 public void execute() {
     try {
         mapper.update(...);
@@ -437,13 +507,37 @@ public void execute() {
 * 是否转换异常；
 * 当前事务是否应该回滚。
 
-如果项目使用 Checked Exception，并要求其触发回滚，应根据项目异常体系明确配置。
+Spring 默认通常对 `RuntimeException` 和 `Error` 回滚，对普通 Checked Exception 不自动回滚。
 
-不要机械给所有事务添加：
+为了让新增事务的回滚边界在代码中更明确，本 Skill 默认约定：**新建或显著修改的业务事务方法，使用 `@Transactional(rollbackFor = Exception.class)`。**
+
+例如：
 
 ```java
-rollbackFor = Exception.class
+@Transactional(rollbackFor = Exception.class)
+public void createPlace(...) {
+    ...
+}
 ```
+
+但以下情况优先遵循目标项目现有事务契约，不得为了统一注解无授权修改：
+
+* 项目已经统一封装事务注解；
+* 项目明确使用更具体的 `rollbackFor` / `noRollbackFor`；
+* 某类 Checked Exception 按业务契约明确不应回滚；
+* 历史公共方法已经形成稳定回滚语义，修改会产生兼容风险。
+
+不得通过：
+
+```text
+所有方法都加 @Transactional(rollbackFor = Exception.class)
+```
+
+来替代对事务必要性和事务范围的判断。`rollbackFor = Exception.class` 只解决“已确定需要事务后如何明确回滚范围”的问题。
+
+原则：
+
+> 先确认需要事务，再显式定义回滚语义；默认使用 `Exception.class`，但项目已有更具体契约时以项目为准。
 
 ---
 
@@ -458,7 +552,9 @@ rollbackFor = Exception.class
 * 第三方接口调用；
 * 长时间计算；
 * 阻塞等待；
-* `sleep`。
+* `sleep`；
+* 与当前一致性边界无关的数据准备和对象转换；
+* 可以在事务外完成的大量内存计算。
 
 推荐：
 
@@ -467,7 +563,7 @@ rollbackFor = Exception.class
    ↓
 开始事务
    ↓
-必要数据库操作
+必要数据库操作和一致性判断
    ↓
 提交
 ```
@@ -488,6 +584,8 @@ rollbackFor = Exception.class
 提交
 ```
 
+如果某个业务判断必须基于事务内查询结果、数据库锁或同一一致性视图，则应保留在事务中，不能为了缩短事务机械移出。
+
 ---
 
 # 16. 事务与线程切换
@@ -499,7 +597,7 @@ Spring 事务通常绑定当前线程。
 例如：
 
 ```java
-@Transactional
+@Transactional(rollbackFor = Exception.class)
 public void process() {
     mapper.update(...);
 
@@ -534,7 +632,9 @@ public void process() {
 * 在 Controller 中定义业务事务；
 * 在 Mapper 中编排业务事务；
 * 假设事务自动跨线程；
-* 通过吞异常让事务继续提交。
+* 通过吞异常让事务继续提交；
+* 用 `rollbackFor = Exception.class` 掩盖不清晰的事务边界；
+* 为减少 Mapper 调用把无关业务强行合并成巨大 SQL 或巨大事务。
 
 ---
 
@@ -570,12 +670,29 @@ Manager 事务
 Service 事务
 ```
 
+确定需要事务后继续检查：
+
+```text
+能否通过 Batch / 条件更新 / 合理合并数据库操作缩短路径？
+    ↓
+事务内是否存在可移出的远程调用、IO、等待或长耗时计算？
+    ↓
+回滚语义是否明确？
+    ↓
+默认 @Transactional(rollbackFor = Exception.class)
+（目标项目已有更具体契约时以项目为准）
+```
+
 完成后检查：
 
 * 这个事务是否真的必要；
 * 普通快照读是否被无意义地加入事务；
 * 事务范围是否过大；
-* 是否存在远程调用位于事务中；
+* 是否可以合理减少数据库往返；
+* 是否为了合并操作制造巨大 SQL 或混合不同业务边界；
+* 是否存在远程调用、文件 IO、阻塞等待或非必要复杂计算位于事务中；
+* 必须依赖事务状态的业务判断是否被错误移到事务外；
+* `rollbackFor` 是否符合项目约定，新增业务事务是否默认明确为 `Exception.class`；
 * 是否吞掉异常；
 * 是否存在事务自调用失效；
 * 是否错误使用 `REQUIRES_NEW`；
@@ -584,5 +701,4 @@ Service 事务
 
 最终原则：
 
-> 没有一致性需求，就不要增加事务；需要事务时，只覆盖真正需要保证一致性的范围。
-
+> 没有一致性需求，就不要增加事务；需要事务时，优先缩短数据库路径和事务持有时间，只覆盖真正需要保证一致性的范围，并明确回滚语义。
