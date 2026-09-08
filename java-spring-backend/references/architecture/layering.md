@@ -684,17 +684,9 @@ PlaceTreeNodeVO
 <module>.vo
 ```
 
-具体业务输出优先使用 VO，不机械新增：
+具体业务输出使用 VO。不要为了区分不同调用层级，再为相同输出职责机械增加另一套模型；只有职责或数据语义真实变化时才进行模型转换。
 
-```text
-PlaceResponse
-PlaceStatsResponse
-place.response.*
-```
-
-但不得为了统一命名无授权重命名已发布历史 API 模型。
-
-统一 HTTP 响应包装属于 API 契约，不属于业务模型分类；具体规则读取：
+统一 HTTP 响应包装属于 API 契约，不属于具体业务输出模型；具体规则读取：
 
 - [api-design.md](../api/api-design.md)
 
@@ -860,7 +852,7 @@ DTO / BO
 * 是否跨模块直接访问其他模块 Mapper；
 * Request / Query / DTO / BO / DO / VO 是否按真实职责归类；
 * Package 是否由职责决定；
-* 具体业务输出是否错误新增为 `*Response` / `response`；
+* 具体业务输出是否使用 VO，是否又机械增加职责相同的额外输出模型；
 * 是否把所有模型机械放入 `dto`；
 * 技术基础设施是否错误放入业务 Package；
 * 一个类是否同时承担多个明显不同职责；
