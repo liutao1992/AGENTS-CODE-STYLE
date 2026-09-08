@@ -39,12 +39,11 @@ Controller 只负责接口边界。
 
 ```java
 @PostMapping("/{id}/audit")
-public AjaxResult audit(
+public void audit(
         @PathVariable String id,
         @Valid @RequestBody PlaceAuditRequest request) {
 
     placeService.audit(id, request, currentOperator());
-    return AjaxResult.success();
 }
 ```
 
@@ -436,14 +435,7 @@ PlaceStatsResponse
 place.response.*
 ```
 
-通用响应包装可以继续沿用项目已有：
-
-```text
-AjaxResult
-Result<T>
-ApiResponse<T>
-PageResponse<T>
-```
+通用响应包装应复用目标项目已有类型。本 Skill 不固定统一响应类名，也不使用具体项目的响应包装类型作为示例。
 
 不得为了统一命名擅自修改已经发布的公共 API；现有历史 `*Response` 模型仅在当前任务明确要求或兼容性允许时迁移。
 
