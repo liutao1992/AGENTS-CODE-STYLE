@@ -44,9 +44,10 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 
 | 涉及领域 | 加载规范 | 主要检查 |
 | --- | --- | --- |
-| Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、Lombok、Null、集合、集合返回契约、异常实现、日志、格式、注释 |
-| 分层、模型、Package、SOLID、跨模块、入站/出站 | [分层](../java-spring-backend/references/architecture/layering.md) | 职责、依赖方向、模型归属、技术组件归属、过度设计 |
-| Spring 框架使用 | [Spring](../java-spring-backend/references/coding/spring.md) | DI、Bean、Validation、重复结构校验、默认兜底、Proxy、Advice、Spring 注解机制 |
+| Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、方法参数、Lombok、Null、集合、集合返回契约、异常实现、日志、格式、注释 |
+| 项目目录、业务 module、公共目录 | [项目结构](../java-spring-backend/references/architecture/project-structure.md) | 业务优先组织、module 内职责目录、common/util/third 归属、跨模块物理边界 |
+| 分层、模型、Package、SOLID、跨模块、入站/出站 | [分层](../java-spring-backend/references/architecture/layering.md) | 职责、依赖方向、模型归属、调用者上下文、Service 拆分、技术组件归属、过度设计 |
+| Spring 框架使用 | [Spring](../java-spring-backend/references/coding/spring.md) | MVC Mapping、DI、Bean、Validation、重复结构校验、默认兜底、Proxy、Advice、Spring 注解机制 |
 | HTTP API | [API](../java-spring-backend/references/api/api-design.md) | URL、Method、Request/VO、统一响应、错误契约、兼容、分页、幂等 |
 | 异常跨层流转 | [异常处理](../java-spring-backend/references/architecture/error-handling.md) | 转换边界、cause、日志归属、重复记录、对外泄漏 |
 | MyBatis 映射 | [MyBatis](../java-spring-backend/references/coding/mybatis.md) | Mapper、XML、ResultMap、TypeHandler、参数绑定、集合查询 Null 契约、动态 SQL |
@@ -60,6 +61,12 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 只加载与当前问题有关的规范。例如：
 
 ```text
+普通业务方法参数明显过多
+→ Java
+
+新增或重组业务 module
+→ 项目结构 + 必要的分层
+
 只改 ResultMap
 → MyBatis
 
@@ -68,6 +75,9 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 
 Controller URL / 返回契约
 → API + 必要的 Spring
+
+只调整 @RequestMapping 注解位置
+→ Spring
 
 新增 VO Package
 → 分层 + 必要的 Java
@@ -112,8 +122,10 @@ references 中存在默认推荐时，必须先检查目标项目是否已有明
 ```text
 ApiResponse<T>
 VO / Request 命名
-Package 结构
+Package / module 结构
 record / class
+方法参数契约
+Spring MVC 路由风格
 异常体系
 日志框架
 分页结构
@@ -295,18 +307,20 @@ Adapter
 
 ## 模型与 Package 审查
 
-模型职责和 Package 的唯一详细事实来源是 `layering.md`。
+模型职责和 Package 的唯一详细事实来源是 `layering.md`；项目 / module 的物理目录组织读取 `project-structure.md`。
 
 Review 只需要确认：
 
 * 本次模型是否按真实职责分类；
+* 新模块或 Package 是否先遵循目标项目已有结构；
+* 是否把业务代码无依据散落到全局 `common` / `util` / `third` 等兜底目录；
 * Package 是否由职责而不是当前目录决定；
 * 具体业务输出是否使用 VO，是否机械增加职责相同的额外输出模型；
 * DO 是否直接泄漏到 HTTP 边界；
 * 技术基础设施是否错误放入业务 Package；
 * 是否机械增加无真实职责的 DTO / BO / Converter / Assembler。
 
-不要在本 Skill 中重新定义 Request / Query / DTO / BO / DO / VO 的完整规则。
+不要在本 Skill 中重新定义 Request / Query / DTO / BO / DO / VO 或完整目录规范。
 
 ---
 
