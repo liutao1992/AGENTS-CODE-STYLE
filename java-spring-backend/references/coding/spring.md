@@ -125,13 +125,175 @@ Bean Validation 适合表达结构约束：
 格式约束
 ```
 
-业务状态、权限、跨数据校验等业务规则仍由业务层处理。
+业务状态、权限、数据存在性、跨字段业务语义以及需要访问数据库或外部系统才能确认的约束，由业务层处理。
 
-不要为了复用校验逻辑，把复杂业务流程塞进自定义 ConstraintValidator。
+不要为了复用校验逻辑，把复杂业务流程塞进自定义 `ConstraintValidator`。
 
 接口校验语义读取：
 
 - [api-design.md](../api/api-design.md)
+
+### 2.1 避免重复结构校验
+
+已经由可信入站边界完成的结构性约束，不应在 Service / Manager 中再次使用手写 `if`、`StringUtils`、`Objects` 等方式机械重复同义校验。
+
+例如 Request 已经声明：
+
+```java
+public class PlaceCreateRequest {
+
+    @NotBlank
+    private String placeCode;
+}
+```
+
+Controller 已经触发校验：
+
+```java
+@PostMapping
+public ApiResponse<Void> create(
+        @Valid @RequestBody PlaceCreateRequest request) {
+
+    placeService.create(request);
+    return ApiResponse.success();
+}
+```
+
+则普通业务流程中不要再次写：
+
+```java
+if (!StringUtils.hasText(request.getPlaceCode())) {
+    throw new BusinessException("场所编号不能为空");
+}
+```
+
+也不要把同一个必填约束改写成：
+
+```java
+Objects.requireNonNull(request.getPlaceCode());
+```
+
+除非当前调用路径并未经过上述可信校验边界，或者这里存在与入站结构校验不同的独立契约。
+
+原则：
+
+> 一个约束由最合适的边界负责；不要为了“防御性编程”在多个层重复表达完全相同的前置条件。
+
+### 2.2 禁止用默认值掩盖无效输入
+
+对于已经声明必填或非空的字段，不得通过兜底值把非法输入悄悄转换成另一个合法值。
+
+避免：
+
+```java
+String placeCode = StringUtils.hasText(request.getPlaceCode())
+        ? request.getPlaceCode()
+        : "";
+```
+
+以及没有业务依据的：
+
+```java
+String placeCode = StringUtils.hasText(request.getPlaceCode())
+        ? request.getPlaceCode()
+        : DEFAULT_PLACE_CODE;
+```
+
+类似：
+
+```text
+null → ""
+null → 0
+blank → 默认编码
+非法枚举 → 默认状态
+```
+
+都可能把结构错误转换成新的业务语义。
+
+只有需求、既有契约或项目稳定实现明确规定默认行为时才能使用默认值；不得由 Agent 为了避免异常自行创造。
+
+### 2.3 Service 仍然负责业务校验
+
+“不重复 Bean Validation”不代表 Service 不做校验。
+
+业务层仍应负责真实业务规则，例如：
+
+```text
+@NotBlank placeCode
+→ 入站结构校验
+
+@Size(max = 128)
+→ 入站结构校验
+
+只有 PENDING 状态允许审核
+→ Service / Manager 业务校验
+
+场所编号是否已存在
+→ Service / Manager + 数据库能力
+
+当前操作人是否有权限
+→ 业务 / 权限边界
+
+数据库必须唯一
+→ UNIQUE Constraint
+```
+
+重点是区分：
+
+```text
+结构有效性
+!=
+业务有效性
+```
+
+### 2.4 多入口调用时先补齐入口校验
+
+Service 可能同时被以下入口调用：
+
+```text
+HTTP Controller
+RPC Endpoint
+Message Consumer
+Scheduled Task
+其他模块 Service / Facade
+```
+
+因此不能仅因为某个 HTTP Controller 使用了 `@Valid`，就假设所有调用方都一定完成相同结构校验。
+
+出现多入口时，优先判断：
+
+1. 每个外部入口是否已经在自己的边界完成必要结构校验；
+2. 项目是否已有统一的方法级 Validation 机制；
+3. Service 方法本身是否明确承担公共输入契约。
+
+如果确实需要方法级校验，可以按项目现有方式评估：
+
+```java
+@Service
+@Validated
+public class PlaceService {
+
+    public void create(@Valid PlaceCreateRequest request) {
+        ...
+    }
+}
+```
+
+但不要形成：
+
+```text
+Controller @Valid
++
+Service @Valid
++
+Service 手写 StringUtils.hasText
+```
+
+三套完全相同的机械校验。
+
+原则：
+
+> 缺少校验时修复真正缺失的入口或公共契约；不要通过业务代码中的零散二次校验弥补不清晰的调用边界。
 
 ---
 
@@ -412,17 +574,23 @@ AOP
 1. 先按 `layering.md` 确认当前类真实职责。
 2. 查看当前模块已有 Spring 注解和依赖注入风格。
 3. Controller/API 契约读取 `api-design.md`，不在 Spring 规范重复推导。
-4. 参数校验区分结构校验和业务校验。
-5. 新增 Bean 前确认确实需要 Spring 生命周期、依赖注入或代理能力。
-6. 使用 `@Transactional`、`@Async`、缓存等代理能力时检查实际代理边界。
-7. Web 异常优先复用统一 Advice / Handler，并读取 `error-handling.md`。
-8. 不硬编码环境配置和敏感凭证。
-9. 修改后执行目标项目已有相关测试和静态检查。
+4. 参数校验区分结构校验和业务校验；已有可信 Bean Validation 时不在 Service / Manager 机械重复同义校验。
+5. 检查必填字段是否被 `""`、`0`、默认编码或默认状态等无依据兜底掩盖。
+6. 多入口调用时确认真正缺失的是哪个入口校验或公共方法契约，不使用零散 `StringUtils` 判断代替边界设计。
+7. 新增 Bean 前确认确实需要 Spring 生命周期、依赖注入或代理能力。
+8. 使用 `@Transactional`、`@Async`、缓存等代理能力时检查实际代理边界。
+9. Web 异常优先复用统一 Advice / Handler，并读取 `error-handling.md`。
+10. 不硬编码环境配置和敏感凭证。
+11. 修改后执行目标项目已有相关测试和静态检查。
 
 检查重点：
 
 * Controller 是否遵循项目已有 Spring MVC 风格；
 * `@Valid` / Bean Validation 是否用于结构性约束；
+* 已完成 Bean Validation 的字段是否又在业务层进行同义 `null` / blank / size 校验；
+* 是否通过 `StringUtils.hasText(...) ? value : defaultValue` 等方式掩盖本应拒绝的无效输入；
+* 是否把结构校验和业务校验混为一谈；
+* 多入口场景是否遗漏真正的入口校验；
 * 是否新增字段注入；
 * 是否自行 `new` Spring 管理组件；
 * 是否创建无必要 Spring Bean；
@@ -434,4 +602,4 @@ AOP
 
 最终原则：
 
-> 分层规范决定组件职责，API 规范决定 HTTP 契约，事务和并发专项规范决定行为边界；Spring 规范只负责这些设计在 Spring 框架中的正确实现。
+> 分层规范决定组件职责，API 规范决定 HTTP 契约，事务和并发专项规范决定行为边界；Spring 规范只负责这些设计在 Spring 框架中的正确实现。结构性约束由合适的可信边界统一保证，业务层不机械二次校验，也不通过无依据默认值掩盖非法输入。
