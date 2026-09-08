@@ -6,6 +6,7 @@
 
 * 明确各层职责；
 * 控制跨层依赖；
+* 明确入站适配、业务核心和出站适配的边界；
 * 明确模型分类与 Package 归属；
 * 明确异常在各层的转换、记录和对外表达边界；
 * 避免业务逻辑和模型职责散落；
@@ -31,35 +32,219 @@ Java 语法、Lombok、`class` / `record`、集合、异常实现和日志写法
 
 # 1. 默认分层
 
-项目默认采用：
+项目默认按以下逻辑边界理解：
 
 ```text
-Controller / Web
-        ↓
-      Service
-        ↓
-      Manager       （按需）
-        ↓
-   Mapper / DAO
-        ↓
-     Database
+                    入站适配器
+       ┌──────────────┼──────────────┐
+ Controller / Web   RPC / Open API   Consumer / Scheduled Task
+       └──────────────┼──────────────┘
+                      ↓
+                   Service
+                      ↓
+                 Manager（按需）
+                 ↙            ↘
+          Mapper / DAO      Client / Adapter
+               ↓                  ↓
+            Database      第三方服务 / 外部系统
+                    出站适配器
 ```
 
 简单理解：
 
 ```text
-Controller   管接口边界
-Service      管业务用例和业务流程
-Manager      管复用、适配和原子数据操作
-Mapper       管数据访问
-Database     管数据存储
+Controller / API / RPC / Consumer
+→ 管不同协议或触发方式的入站边界
+
+Service
+→ 管业务用例和业务流程
+
+Manager
+→ 管复用、适配和原子数据操作
+
+Mapper / DAO
+→ 管数据库访问
+
+Client / Adapter
+→ 管第三方服务、外部协议和技术细节隔离
+
+Database / Third Party
+→ 外部资源
 ```
 
 原则：
 
-> 上层可以依赖下层，下层不得反向依赖上层。
+> 入站适配器负责把外部请求转换为应用能够理解的调用；Service 表达业务用例；出站适配器负责把应用调用转换为数据库、第三方协议或外部资源操作。
+
+> 上层可以依赖下层或稳定抽象，下层不得反向依赖上层。
 
 Manager 为可选层，不得为了分层形式机械创建。
+
+上图表达的是逻辑职责，不要求每个项目都创建：
+
+```text
+openapi
+rpc
+consumer
+adapter
+client
+integration
+```
+
+等物理 Package。只有目标项目真实存在对应协议、外部依赖或已有目录约定时，才按项目现有结构组织代码。
+
+---
+
+## 1.1 入站适配器
+
+入站适配器是外部世界进入应用业务能力的入口。
+
+常见形式包括：
+
+```text
+HTTP Controller
+Open API Endpoint
+RPC Endpoint
+Message Consumer
+Scheduled Task
+Command / Job Handler
+```
+
+它们的共同职责是：
+
+* 接收外部输入或触发事件；
+* 完成协议相关的参数解析和基础校验；
+* 获取当前调用上下文；
+* 调用 Service；
+* 把 Service 结果转换为当前协议需要的返回或确认结果。
+
+不同入站适配器应优先复用 Service，而不是相互调用。
+
+推荐：
+
+```text
+HTTP Controller ───┐
+RPC Endpoint ──────┼→ PlaceService
+Message Consumer ──┘
+```
+
+避免：
+
+```text
+RPC Endpoint
+    ↓
+HTTP Controller
+    ↓
+Service
+```
+
+也避免：
+
+```text
+Message Consumer
+    ↓
+Controller
+```
+
+原因是 Controller、RPC Endpoint、Consumer 都属于协议适配边界，不应把另一个协议适配器当作业务能力复用。
+
+原则：
+
+> 复用业务能力应复用 Service / Facade，不复用另一个入站协议适配器。
+
+---
+
+## 1.2 出站适配器
+
+应用访问数据库、第三方服务、对象存储、消息系统或其他外部资源时，应明确出站边界。
+
+常见形式包括：
+
+```text
+Mapper / DAO
+HTTP Client
+RPC Client
+SDK Adapter
+Object Storage Client
+Message Producer
+External Data Client
+```
+
+Mapper / DAO 只是数据库访问边界，不代表所有下游能力都应该实现成 DAO。
+
+例如：
+
+```text
+Manager
+  ├── PlaceMapper        → Database
+  ├── FaceClient         → Face Recognition Service
+  ├── StorageClient      → Object Storage
+  └── NotificationClient → External Message Service
+```
+
+禁止把：
+
+```text
+第三方 HTTP 调用
+RPC 调用
+对象存储 SDK
+消息发送
+```
+
+为了“统一下层结构”机械塞入 Mapper / DAO。
+
+原则：
+
+> 数据库访问走 Mapper / DAO；其他外部资源通过符合项目现有约定的 Client / Adapter / Gateway / Integration 边界隔离。
+
+具体 Package 名称以目标项目现有结构为准，本 Skill 不强制统一命名为 `client` 或 `adapter`。
+
+---
+
+## 1.3 业务核心不感知协议细节
+
+Service 不应理解：
+
+```text
+HTTP Request / Response
+RPC 框架对象
+消息中间件 Record / Message
+第三方 SDK Response
+第三方 SDK Exception
+数据库拼音字段
+```
+
+这些对象应该在对应适配边界完成转换。
+
+典型方向：
+
+```text
+外部协议模型
+      ↓
+入站适配器
+      ↓
+Request / Query / 业务参数
+      ↓
+Service
+```
+
+以及：
+
+```text
+Service
+   ↓
+Manager / 稳定 Client 抽象
+   ↓
+第三方 Adapter
+   ↓
+供应商 SDK / HTTP / RPC
+```
+
+如果某个第三方能力非常简单，并且目标项目已有稳定的项目级 Client 抽象，Service 可以直接依赖该稳定抽象；不要求为了形式额外增加 Manager。
+
+原则：
+
+> 隔离的是易变协议和技术细节，不是机械增加调用层级。
 
 ---
 
@@ -80,8 +265,8 @@ SOLID 用于帮助判断职责、依赖和扩展边界，不用于机械增加�
 在当前分层中：
 
 ```text
-Controller
-→ HTTP 接口边界
+Controller / Endpoint / Consumer
+→ 外部协议或触发边界
 
 Service
 → 业务流程和业务用例
@@ -91,6 +276,9 @@ Manager
 
 Mapper
 → 数据库访问
+
+Client / Adapter
+→ 外部服务和技术协议隔离
 ```
 
 例如，不应让 `PlaceService` 同时承担：
@@ -212,6 +400,7 @@ public void audit(...) {
 
 * 第三方系统；
 * 外部 HTTP 服务；
+* RPC；
 * 对象存储；
 * 消息系统；
 * 可替换算法；
@@ -282,7 +471,7 @@ SOLID
         ↓ 是
 考虑 ISP
 
-高层业务是否直接耦合易变技术细节？
+高层业务是否直接耦合易变第三方或技术细节？
         ↓ 是
 考虑 DIP
 ```
@@ -295,7 +484,7 @@ SOLID
 
 # 3. Controller / Web 层
 
-Controller 负责系统接口边界。
+Controller 是 HTTP 入站适配器。
 
 主要职责：
 
@@ -311,8 +500,9 @@ Controller 负责系统接口边界。
 * 直接调用 Mapper / DAO；
 * 编写 SQL；
 * 定义业务事务；
-* 承载复杂业务逻辑；
-* 直接操作数据库对象完成业务流程。
+* 承载业务规则；
+* 直接操作数据库对象完成业务流程；
+* 被 RPC Endpoint、Consumer 等其他入站适配器作为业务能力调用。
 
 默认示例：
 
@@ -331,7 +521,7 @@ public ApiResponse<Void> audit(
 
 原则：
 
-> Controller 保持轻量，只表达 HTTP 接口边界。
+> Controller 保持轻量，只表达 HTTP 接口边界；业务复用发生在 Service，不发生在 Controller。
 
 具体 HTTP 和响应契约读取：
 
@@ -350,6 +540,7 @@ Service 负责业务用例和业务流程编排。
 * 执行业务校验；
 * 编排多个 Manager；
 * 简单场景下直接调用 Mapper；
+* 在存在稳定项目级抽象时调用外部能力；
 * 组织业务输入和输出；
 * 协调多个业务能力。
 
@@ -376,13 +567,15 @@ doSomething(...)
 Service 不负责：
 
 * HTTP 状态和响应协议；
+* RPC / 消息中间件协议对象；
 * SQL；
 * 数据库字段映射；
+* 第三方 SDK 请求和返回对象；
 * 第三方协议细节。
 
 原则：
 
-> Service 表达业务流程，不成为 HTTP、SQL 和技术细节的混合层。
+> Service 表达业务流程，不成为 HTTP、SQL、消息协议和第三方技术细节的混合层。
 
 ---
 
@@ -397,10 +590,13 @@ Manager 为可选层。
 * 可复用的数据操作；
 * 公共查询能力；
 * 第三方服务适配；
+* 多个外部 Client 的组合调用；
+* 第三方返回结果归一化；
+* 第三方异常转换和协议隔离；
 * 缓存等技术能力封装；
 * 需要独立事务保证的原子数据操作。
 
-例如：
+例如数据访问组合：
 
 ```text
 PlaceService
@@ -408,6 +604,34 @@ PlaceService
 PlaceManager
    ↙       ↘
 PlaceMapper AuditMapper
+```
+
+例如第三方适配：
+
+```text
+CaseService
+     ↓
+FaceRecognitionManager
+     ↓
+FaceRecognitionClient
+     ↓
+Vendor SDK / HTTP API
+```
+
+在第三方适配场景中，Manager / Adapter 可以负责：
+
+```text
+供应商请求模型
+      ↓ 转换
+项目内部调用参数
+
+供应商返回模型
+      ↓ 转换
+项目内部结果
+
+供应商异常
+      ↓ 转换
+项目可理解的技术 / 业务边界异常
 ```
 
 不要因为只有：
@@ -418,17 +642,25 @@ Service
 Mapper
 ```
 
+或者：
+
+```text
+Service
+   ↓
+稳定的项目级 Client
+```
+
 就强制增加 Manager。
 
 原则：
 
-> 有真实复用、一致性或技术隔离需求时再引入 Manager。
+> 有真实复用、一致性、组合调用或技术隔离需求时再引入 Manager。
 
 ---
 
 # 6. Mapper / DAO 层
 
-Mapper / DAO 负责数据库访问。
+Mapper / DAO 只负责数据库访问边界。
 
 主要职责：
 
@@ -457,8 +689,18 @@ Mapper 不负责：
 * 权限业务判断；
 * 业务状态流转；
 * 复杂业务决策；
+* HTTP / RPC 调用；
+* 对象存储操作；
+* 消息发送；
+* 第三方 SDK；
 * HTTP 处理；
 * 业务事务编排。
+
+不要因为某个外部系统也“提供数据”，就把它机械实现成 DAO。
+
+原则：
+
+> DAO / Mapper 面向数据库；其他外部资源使用与其协议和职责匹配的出站适配边界。
 
 MyBatis 基础设施、数据库与 Java 映射等详细规则读取：
 
@@ -466,43 +708,100 @@ MyBatis 基础设施、数据库与 Java 映射等详细规则读取：
 
 ---
 
-# 7. 分层调用与依赖规则
+## 6.1 Client / Adapter / 外部集成边界
 
-简单业务允许：
+访问非数据库外部资源时，应优先沿用目标项目已有的：
 
 ```text
-Controller
-    ↓
-Service
-    ↓
-Mapper
+Client
+Adapter
+Gateway
+Integration
+Provider
 ```
 
-需要真实复用、一致性操作或技术适配时：
+等命名和目录约定。
+
+它们可以负责：
+
+* HTTP / RPC 调用；
+* 第三方 SDK 封装；
+* 请求和返回模型转换；
+* 外部错误码转换；
+* 技术异常隔离；
+* 鉴权参数和协议头组装；
+* 对象存储访问；
+* 消息发送；
+* 外部数据源访问。
+
+上层不应直接依赖：
 
 ```text
-Controller
-    ↓
-Service
-    ↓
-Manager
-    ↓
-Mapper
+VendorXxxResponse
+VendorXxxException
+SdkClient
+HttpResponse
+RpcContext
+```
+
+等易变供应商或协议对象。
+
+如果目标项目已有成熟的 Client 层，则直接复用；如果只是一次非常简单且稳定的外部调用，也不要仅为了本文机械创建一套新 Adapter 架构。
+
+原则：
+
+> 建立出站适配边界是为了隔离易变技术细节，不是为了增加目录数量。
+
+---
+
+# 7. 分层调用与依赖规则
+
+简单数据库业务允许：
+
+```text
+Controller / Endpoint
+        ↓
+      Service
+        ↓
+      Mapper
+```
+
+需要真实复用、一致性操作或组合能力时：
+
+```text
+Controller / Endpoint
+        ↓
+      Service
+        ↓
+      Manager
+      ↙      ↘
+   Mapper   Client
+```
+
+不同入站协议共享业务能力时：
+
+```text
+Controller ────┐
+RPC Endpoint ──┼→ Service
+Consumer ──────┘
 ```
 
 禁止：
 
 ```text
 Controller → Mapper
-Mapper     → Service
-Manager    → Controller
+RPC Endpoint → Controller
+Consumer → Controller
+Mapper → Service
+Manager → Controller
+Mapper → 第三方 HTTP / RPC
 ```
 
-也禁止为了减少代码直接从业务层绕过已有边界访问底层实现。
+也禁止为了减少代码直接从业务层绕过已有边界访问易变技术实现。
 
 原则：
 
-> 依赖方向保持单向，职责边界比调用方便更重要。
+> 依赖方向保持单向；协议适配器彼此独立；业务复用发生在 Service / Facade；数据库与其他外部资源使用各自合适的出站边界。
 
 ---
 
@@ -544,7 +843,7 @@ try {
 
 * 当前项目已经有统一的 DAO / DataAccess 异常体系；
 * 接入的底层库不会被 Spring 正确翻译；
-* 需要隔离第三方驱动、SDK 或存储实现的异常类型；
+* 需要隔离第三方驱动或存储实现的异常类型；
 * 上层不应直接依赖某个具体持久化技术的异常。
 
 如果确实需要统一捕获多个不可细分的底层异常，可以在该技术边界使用较宽的捕获方式并转换为项目已有的数据访问异常，但必须：
@@ -554,18 +853,6 @@ try {
 不吞异常
 不改变成功/失败语义
 ```
-
-例如概念上：
-
-```java
-try {
-    return storageClient.load(id);
-} catch (Exception ex) {
-    throw new DataAccessException("Failed to load data", ex);
-}
-```
-
-这里的 `DataAccessException` 只表示“项目已有的统一数据访问异常”这一角色，不要求新建同名类型。
 
 DAO / Mapper 层通常不重复记录完整异常日志，因为上层拥有更多业务上下文；如果底层已经记录一次，上层再次记录同一堆栈通常只会产生重复日志和噪声。
 
@@ -586,18 +873,18 @@ DAO catch
 
 ---
 
-### 7.1.2 Manager 层
+### 7.1.2 Manager / 外部适配边界
 
-Manager 与 Service 同进程部署时，异常处理方式通常接近 DAO / 应用内部能力层：
+Manager 与 Service 同进程部署时：
 
 * 能恢复的异常可以在职责范围内处理；
 * 需要改变抽象语义时可以转换异常；
 * 无法处理的异常继续向 Service / 应用边界传播；
 * 不因为“经过 Manager”就重复打印同一异常堆栈。
 
-Manager 进行异常转换时，必须建立真实的抽象边界。
+对于第三方出站适配器，适合在供应商技术异常跨越边界时进行转换。
 
-例如第三方能力：
+例如：
 
 ```text
 VendorSdkException
@@ -621,11 +908,11 @@ ServiceException
 
 机械逐层包装。
 
-如果 Manager 本身被独立部署成远程服务，则它已经成为一个独立应用边界，应按照 Service / API 边界的方式完成日志记录和对外异常转换，而不能假设上层仍与它共享同一进程日志。
+如果 Manager 或外部适配能力本身被独立部署成远程服务，则它已经成为一个独立应用边界，应按照 Service / API 边界的方式完成日志记录和对外异常转换，而不能假设上层仍与它共享同一进程日志。
 
 原则：
 
-> 同进程 Manager 不重复制造日志和异常层级；独立部署时按独立服务边界处理。
+> 同进程 Manager / Adapter 不重复制造日志和异常层级；真正跨技术或服务边界时才转换异常。
 
 ---
 
@@ -679,14 +966,7 @@ catch (Exception ex) {
 
 也不应机械按系统故障记录为 `error`；日志级别和是否记录应以项目已有日志规范和实际影响为准。
 
-Service 记录参数时必须遵守安全规则，不得直接打印：
-
-* 密码；
-* Token；
-* 密钥；
-* 完整身份证件；
-* 生物特征；
-* 其他敏感数据。
+Service 记录参数时必须遵守安全规则，不得直接打印敏感数据。
 
 原则：
 
@@ -723,14 +1003,6 @@ try {
 }
 ```
 
-否则容易出现：
-
-* Controller 重复异常转换；
-* 返回结构不一致；
-* 重复打印日志；
-* 吞掉事务回滚所需异常；
-* 不同接口形成不同错误语义。
-
 对于传统服务端页面渲染场景，如果异常会导致页面无法正常渲染，应由 Web 错误处理机制返回友好的错误页面或提示，而不是向用户展示技术堆栈。
 
 对于 REST API，应转换为稳定的错误响应契约。
@@ -763,16 +1035,6 @@ try {
 * 内部服务器地址；
 * 第三方密钥和凭证；
 * 其他内部技术细节。
-
-例如：
-
-```text
-SQLException
-DuplicateKeyException
-VendorSdkTimeoutException
-```
-
-不应直接成为稳定 API 错误协议。
 
 应该由统一异常映射层转换为项目已有的业务错误码和安全错误信息。
 
@@ -826,7 +1088,7 @@ SQLException
 推荐思路：
 
 ```text
-DAO / Manager
+DAO / Manager / Adapter
 → 不重复打印
 
 Service / 应用边界
@@ -847,13 +1109,6 @@ Web / API
 log.error(..., ex);
 throw ex;
 ```
-
-否则会导致：
-
-* 一次请求产生多份相同堆栈；
-* 日志量被放大；
-* 告警重复；
-* 真正关键业务上下文被噪声淹没。
 
 ---
 
@@ -887,15 +1142,7 @@ catch (Exception ex) {
 每层 wrap
 ```
 
-禁止在没有实际抽象边界时创建：
-
-```text
-DAOException
-ManagerException
-ServiceException
-```
-
-平行异常体系。
+禁止在没有实际抽象边界时创建平行异常体系。
 
 禁止为了隐藏异常而破坏事务回滚、API 错误语义或调用方判断逻辑。
 
@@ -1529,6 +1776,20 @@ JsonStringListTypeHandler
 place.mapper
 ```
 
+外部集成组件同样按自身职责归属，不因某个业务 Service 使用就机械放入该 Service 所在 Package。
+
+对于：
+
+```text
+HTTP Client
+RPC Client
+第三方 SDK Adapter
+对象存储 Client
+消息 Producer
+```
+
+先搜索目标项目是否已有 `client`、`integration`、`adapter`、`gateway`、`provider` 等统一目录，再决定归属。
+
 原则：
 
 > “当前模块需要这个类”不等于“这个类属于当前模块”。
@@ -1567,6 +1828,8 @@ place.mapper
 
 但最终仍以真实一致性范围为准。
 
+外部 HTTP / RPC / 消息调用是否放入数据库事务，不能由“它位于 Manager”推导，必须按事务规范判断；默认避免把不可控远程调用包进长数据库事务。
+
 ---
 
 # 12. 不要过度分层
@@ -1581,16 +1844,16 @@ Service
 Mapper
 ```
 
-需要复用、一致性处理或第三方适配时：
+需要复用、一致性处理或第三方适配时，可以：
 
 ```text
-Controller
-    ↓
-Service
-    ↓
-Manager
-    ↓
-Mapper
+Controller / Endpoint
+        ↓
+      Service
+        ↓
+      Manager
+      ↙      ↘
+   Mapper   Client
 ```
 
 不要为了架构形式机械增加：
@@ -1603,6 +1866,9 @@ RepositoryImpl
 Converter
 Assembler
 Factory
+Adapter
+Gateway
+Client
 ```
 
 也不要以 SOLID 为理由机械增加：
@@ -1624,9 +1890,22 @@ Converter
 Assembler
 ```
 
+也不要因为本文提到了入站 / 出站适配器，就要求所有项目创建：
+
+```text
+openapi
+rpc
+consumer
+adapter
+client
+integration
+```
+
+目录。
+
 原则：
 
-> 先保持简单，真实复杂度出现后再增加对应抽象。
+> 先保持简单，真实协议边界、外部依赖或复杂度出现后再增加对应抽象。
 
 ---
 
@@ -1634,27 +1913,34 @@ Assembler
 
 编码前：
 
-1. 查看当前模块已有分层和调用关系。
+1. 查看当前模块已有分层、入口类型、外部依赖和调用关系。
 2. 找到至少一个类似实现。
-3. 判断逻辑属于 Controller、Service、Manager、Mapper、模型还是技术基础设施。
+3. 判断逻辑属于入站适配器、Service、Manager、Mapper、外部 Client / Adapter、模型还是技术基础设施。
 4. 判断是否已经存在可复用能力。
-5. 新增类前先确定职责，再确定 Package。
-6. 新增模型时按本文判断 Request / Query / DTO / BO / DO / VO，再读取 Java 规范确定实现方式。
-7. 新增技术组件时按技术职责确定 Package，不按当前业务使用者归属。
-8. 新增或调整类、接口、抽象时，确认存在真实职责、变化、替换或隔离需求。
-9. 涉及异常处理时，确认由哪一层负责转换、补充业务上下文、记录日志和对外表达，避免每层重复 catch / log / wrap。
-10. 涉及事务、锁或一致性时读取事务规范。
-11. 涉及并发或跨线程时读取并发规范。
+5. 新增入口时确认它属于 HTTP、RPC、消息、任务等哪一种协议边界，并优先调用 Service，而不是另一个入站适配器。
+6. 新增外部依赖时确认它属于数据库还是其他外部资源；数据库走 Mapper，其他资源优先复用项目已有 Client / Adapter / Gateway 等边界。
+7. 新增类前先确定职责，再确定 Package。
+8. 新增模型时按本文判断 Request / Query / DTO / BO / DO / VO，再读取 Java 规范确定实现方式。
+9. 新增技术组件时按技术职责确定 Package，不按当前业务使用者归属。
+10. 新增或调整类、接口、抽象时，确认存在真实职责、变化、替换或隔离需求。
+11. 涉及异常处理时，确认由哪一层负责转换、补充业务上下文、记录日志和对外表达，避免每层重复 catch / log / wrap。
+12. 涉及事务、锁或一致性时读取事务规范。
+13. 涉及并发或跨线程时读取并发规范。
 
 编码后检查：
 
+* Controller、RPC Endpoint、Consumer 等入站适配器是否互相调用，而不是复用 Service；
 * Controller 是否直接调用 Mapper；
-* Controller 是否存在复杂业务逻辑；
-* Service 是否混入 HTTP、SQL 或第三方协议细节；
+* Controller 是否存在业务逻辑；
+* Service 是否混入 HTTP、RPC、消息、SQL 或第三方 SDK 协议细节；
+* Service 是否直接暴露或依赖供应商 Request / Response / Exception；
 * Mapper 是否包含业务判断；
+* Mapper 是否错误承担 HTTP、RPC、对象存储、消息等非数据库外部访问；
+* 第三方 Client / Adapter 是否把供应商技术对象和异常泄漏到业务核心；
+* 是否为了简单外部调用机械增加 Manager / Adapter / Gateway；
 * 是否跨模块直接访问其他模块 Mapper；
 * DAO / Mapper 是否无必要地捕获所有异常并重复打印日志；
-* Manager 是否在没有新抽象语义时机械包装异常或重复打印同一堆栈；
+* Manager / Adapter 是否在没有新抽象语义时机械包装异常或重复打印同一堆栈；
 * Service / 应用边界是否保留足够的业务失败上下文；
 * 同一异常链是否在多个层级重复 `log.error(..., ex)`；
 * 异常转换时是否保留原始 cause；
@@ -1680,4 +1966,4 @@ Assembler
 
 最终原则：
 
-> 先确定职责，再确定 Package；分层和模型边界负责“类是什么、放哪里”，异常边界负责“哪里转换、哪里记录、哪里对外表达”，Java 规范负责“类怎么写”，SOLID 只用于解决真实设计问题。
+> 先识别入站、业务核心和出站边界，再确定职责与 Package；分层和模型边界负责“类是什么、放哪里”，异常边界负责“哪里转换、哪里记录、哪里对外表达”，Java 规范负责“类怎么写”，SOLID 只用于解决真实设计问题。
