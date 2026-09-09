@@ -188,13 +188,152 @@ toString
 
 只有确认这些行为符合对象语义时才使用。
 
-### 3.1 不为了统一机械增加 Setter
+### 3.1 JavaBean 命名
+
+JavaBean 名称应直接表达模型职责，不再附加没有独立语义的泛化后缀。
+
+推荐：
+
+```text
+PlaceCreateRequest
+PlaceQuery
+PlaceDTO
+PlaceAuditBO
+PlaceDO
+PlaceDetailVO
+```
+
+避免在职责已经明确时再使用：
+
+```text
+PlaceBean
+PlaceInfo
+PlaceData
+PlaceModel
+CommonBean
+```
+
+如果目标项目已经稳定使用某类历史命名，应保持兼容，不为了本规则批量迁移。
+
+JavaBean 属性继续遵循 `lowerCamelCase` 和完整英文业务语义，例如：
+
+```java
+private String placeCode;
+private LocalDateTime entryTime;
+private Boolean enabled;
+```
+
+布尔属性优先使用能够直接表达状态的名称，例如：
+
+```text
+enabled
+deleted
+editable
+auditable
+```
+
+不要为了 JavaBean 风格机械把属性命名成 `isEnabled`、`isDeleted`。如果已有 Jackson、MyBatis、RPC 或历史 API 序列化契约，则以实际属性解析和兼容性要求为准。
+
+原则：
+
+> JavaBean 名称表达“它是什么职责”，字段名称表达“它承载什么业务语义”；不要用 `Bean / Info / Data / Model` 代替职责设计。
+
+### 3.2 `@Builder` 与 `@NoArgsConstructor`
+
+对于需要在 Java 代码中频繁组装、字段较多或使用多个 Setter 会明显降低可读性的普通模型，可以优先使用 Lombok `@Builder`。
+
+例如避免：
+
+```java
+PlaceDetailVO detail = new PlaceDetailVO();
+detail.setId(place.getId());
+detail.setPlaceCode(place.getPlaceCode());
+detail.setPlaceName(place.getPlaceName());
+detail.setEnabled(place.getEnabled());
+```
+
+可以使用：
+
+```java
+PlaceDetailVO detail = PlaceDetailVO.builder()
+        .id(place.getId())
+        .placeCode(place.getPlaceCode())
+        .placeName(place.getPlaceName())
+        .enabled(place.getEnabled())
+        .build();
+```
+
+对于需要保留标准 JavaBean 无参实例化能力的普通可变模型，可以同时提供 `@NoArgsConstructor`。典型包括项目通过无参构造 + Setter 完成绑定、映射或反序列化的模型。
+
+类级 `@Builder` 与 `@NoArgsConstructor` 同时使用时，必须保证 Builder 存在可调用的全参数构造路径。推荐写法：
+
+```java
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+public class PlaceDetailVO {
+
+    private String id;
+    private String placeCode;
+    private String placeName;
+    private Boolean enabled;
+}
+```
+
+这样：
+
+```text
+@NoArgsConstructor
+→ 保留 JavaBean / 框架需要的无参实例化能力
+
+@Builder
+→ 简化代码中的对象组装，减少连续 Setter
+
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+→ 为类级 Builder 提供完整构造路径，同时避免无必要暴露 public 全参构造器
+```
+
+不要只为了“统一 Lombok 风格”给所有对象机械增加 `@Builder`。以下场景应先判断真实需要：
+
+* 只有一两个字段且构造非常简单；
+* 对象不应允许任意字段组合；
+* 对象必须通过显式构造器或工厂方法建立不变式；
+* Builder 会绕过必要的业务校验或状态约束；
+* 目标项目已有其他稳定构造方式。
+
+同样，`@NoArgsConstructor` 不是所有类的默认要求。不可变对象、必须在构造阶段满足不变式的对象，不应为了 JavaBean 形式无依据增加无参构造器。
+
+不要使用 `@Builder.Default` 自行创造业务默认值。Builder 中的默认值仍必须来自明确需求或稳定契约。
+
+Builder 只负责对象构造，不替代业务行为。例如需要状态校验的：
+
+```java
+place.approve(operator);
+```
+
+不能仅为了使用 Builder 改成任意构造：
+
+```java
+PlaceDO.builder()
+        .status(APPROVED)
+        .build();
+```
+
+从而绕过已有业务状态流转。
+
+原则：
+
+> `@Builder` 用于让对象组装更清晰，`@NoArgsConstructor` 用于满足真实 JavaBean / 框架实例化需求；二者服务于构造便利性，不得破坏对象不变式、业务规则和既有框架契约。
+
+### 3.3 不为了统一机械增加 Setter
 
 如果对象应保持不可变或受控修改，只暴露需要的访问方式。
 
 业务行为不能被普通 Setter 替代。
 
-### 3.2 基本类型与包装类型
+### 3.4 基本类型与包装类型
 
 需要表达：
 
@@ -208,7 +347,7 @@ toString
 
 不得为了统一风格批量改变已有 API / 数据库 Null 语义。
 
-### 3.3 不自行增加业务默认值
+### 3.5 不自行增加业务默认值
 
 没有明确契约时，模型字段不得自行初始化：
 
@@ -220,7 +359,7 @@ private LocalDateTime createTime = LocalDateTime.now();
 
 默认值必须来自需求、项目稳定约定或数据库明确职责。
 
-### 3.4 `toString` 与敏感信息
+### 3.6 `toString` 与敏感信息
 
 不要为了调试机械输出完整对象。密码、Token、Secret、证件、生物特征等敏感字段不得通过自动 `toString()` 或日志泄漏。
 
@@ -632,18 +771,19 @@ if (condition) return;
 
 修改 Java 代码时检查：
 
-1. 名称是否表达真实英文业务语义。
+1. 名称是否表达真实英文业务语义，JavaBean 是否使用职责明确的 Request / Query / DTO / BO / DO / VO 等命名，而不是泛化 `Bean / Info / Data / Model`。
 2. 新类是否有真实独立职责，是否已搜索现有实现。
 3. 模型是否沿用项目 `class` / Lombok 风格，是否机械使用 `@Data` / `record`。
-4. 方法参数是否过多；封装是否基于完整语义、来源、生命周期和信任边界，而不是凑参数数量。
-5. 普通查询条件是否已经适合 Query。
-6. 方法是否因职责混杂而过长，而不是仅根据行数机械拆分。
-7. 已有非 Null 集合契约时是否仍存在重复 Null 防御。
-8. 是否通过默认值或 fallback 掩盖错误。
-9. Optional、泛型、BigDecimal、时间语义是否正确。
-10. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
-11. 日志是否泄漏敏感数据。
-12. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
+4. 使用 `@Builder` / `@NoArgsConstructor` 是否来自真实对象构造和框架实例化需求；类级 Builder 是否具有可用构造路径，是否破坏对象不变式或业务规则。
+5. 方法参数是否过多；封装是否基于完整语义、来源、生命周期和信任边界，而不是凑参数数量。
+6. 普通查询条件是否已经适合 Query。
+7. 方法是否因职责混杂而过长，而不是仅根据行数机械拆分。
+8. 已有非 Null 集合契约时是否仍存在重复 Null 防御。
+9. 是否通过默认值或 fallback 掩盖错误。
+10. Optional、泛型、BigDecimal、时间语义是否正确。
+11. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
+12. 日志是否泄漏敏感数据。
+13. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
 
 最终原则：
 
