@@ -1,37 +1,40 @@
 # Spring Boot 编码规范
 
-本文档定义 Spring Boot 框架使用规范。
+本文档定义 Spring Framework / Spring Boot 的框架使用规范。
 
 本文负责回答：
 
-> Spring Bean、依赖注入、Validation、配置、Proxy、Web 异常处理等框架能力应该怎么使用。
+> Spring MVC、Bean Validation、依赖注入、Bean 生命周期、配置、Proxy、事务 API、异步注解和 Web 异常处理机制应该怎么使用。
 
-本文不重复定义 Controller / Service / Manager / Mapper 的架构职责，也不重复 HTTP 契约、事务设计和并发设计。
+本文不定义：
 
-相关规范：
+```text
+Controller / Service / Manager / Mapper 的业务职责
+HTTP URL / Method / VO / 统一响应契约
+事务是否需要以及一致性范围
+并发是否值得引入
+异常跨层语义
+```
 
-- [应用分层与模型边界](../architecture/layering.md)
-- [异常处理与错误边界](../architecture/error-handling.md)
+这些分别读取：
+
+- [分层](../architecture/layering.md)
+- [API](../api/api-design.md)
 - [事务](../architecture/transactions.md)
 - [并发](../architecture/concurrency.md)
-- [API 设计](../api/api-design.md)
-- [Java 编码](java.md)
+- [异常处理](../architecture/error-handling.md)
 
 核心原则：
 
-> Spring 用于管理应用组件、依赖和框架边界，不替代业务分层设计。
-
-> 具体业务输出优先使用 VO；统一 HTTP 响应包装默认使用 `ApiResponse<T>`，但目标项目已有响应契约时以项目为准。详细规则由 API 规范维护。
+> Spring 负责容器、代理和协议框架机制，不替代业务分层和领域契约设计。
 
 ---
 
-## 1. Controller 的 Spring 使用
+## 1. Spring MVC
 
-Controller 属于 HTTP 入站适配器，职责边界统一读取：
+Controller 是 HTTP 入站适配器，职责读取 `layering.md`。
 
-- [layering.md](../architecture/layering.md#3-controller--web-层)
-
-Spring MVC 中按项目现有风格使用：
+按目标项目现有风格使用：
 
 ```text
 @RestController
@@ -44,7 +47,7 @@ Spring MVC 中按项目现有风格使用：
 @DeleteMapping
 ```
 
-请求参数根据 HTTP 契约使用：
+请求绑定根据真实 HTTP 契约选择：
 
 ```text
 @PathVariable
@@ -53,40 +56,13 @@ Spring MVC 中按项目现有风格使用：
 @ModelAttribute
 ```
 
-命令类接口默认示例：
+URL、HTTP Method、Request、VO、统一响应和兼容性由 `api-design.md` 决定；Spring 规范不重新定义这些契约。
 
-```java
-@PostMapping("/{id}/audit")
-public ApiResponse<Void> audit(
-        @PathVariable String id,
-        @Valid @RequestBody PlaceAuditRequest request) {
+### 1.1 Mapping 注解位置
 
-    placeService.audit(id, request, currentOperator());
-    return ApiResponse.success();
-}
-```
+本 Skill 不机械规定 `@RequestMapping` 只能放方法，也不机械要求必须放类上。
 
-查询类接口默认示例：
-
-```java
-@GetMapping("/{id}")
-public ApiResponse<PlaceVO> detail(@PathVariable String id) {
-    PlaceVO place = placeService.getById(id);
-    return ApiResponse.success(place);
-}
-```
-
-这里的 `ApiResponse.success(...)` 只表示本 Skill 的默认示例。具体返回类型、构造方法、JSON 字段和历史契约以目标项目已有实现为准，不得为了示例强制迁移。
-
-URL、HTTP Method、Request / VO、统一响应和兼容性统一读取：
-
-- [api-design.md](../api/api-design.md)
-
-### 1.1 路由注解位置遵循项目一致性
-
-本 Skill 不机械规定 `@RequestMapping` 只能放在方法上，也不机械要求必须放在类上。
-
-以下两种方式都可以是合理的：
+以下都可以是合理方式：
 
 ```java
 @RestController
@@ -94,84 +70,68 @@ URL、HTTP Method、Request / VO、统一响应和兼容性统一读取：
 public class PlaceController {
 
     @GetMapping("/{id}")
-    public ApiResponse<PlaceVO> detail(@PathVariable String id) {
+    public Object detail(@PathVariable String id) {
         ...
     }
 }
 ```
 
-以及：
+或：
 
 ```java
 @RestController
 public class PlaceController {
 
     @GetMapping("/places/{id}")
-    public ApiResponse<PlaceVO> detail(@PathVariable String id) {
+    public Object detail(@PathVariable String id) {
         ...
     }
 }
 ```
 
-选择依据是：
+选择依据：
 
-* 目标项目已有风格；
-* URL 是否容易搜索和定位；
-* 公共前缀是否真实稳定；
-* 是否会因为继承、组合或多级 Mapping 造成难以理解的最终路径。
+* 项目已有风格；
+* 公共前缀是否稳定；
+* 最终 URL 是否容易定位；
+* 是否存在继承 / 多级 Mapping 导致路径难以理解。
 
-同一模块应保持合理一致，不为了个人偏好批量迁移已有 Controller。
-
-能够使用更具体的映射注解时，优先：
-
-```text
-@GetMapping
-@PostMapping
-@PutMapping
-@PatchMapping
-@DeleteMapping
-```
-
-而不是所有方法统一写宽泛的 `@RequestMapping` 再配置 method。
-
-URL 是否采用资源式 REST、业务动作路径或兼容历史接口属于 API 契约，统一由 `api-design.md` 判断；Spring 规范不强制一种 URL 流派。
+能够使用更具体映射注解时，优先具体注解，不把所有方法机械写成宽泛 `@RequestMapping`。
 
 ### 1.2 Controller 保持协议层简洁
 
-Controller 方法应以 Spring MVC 边界代码为主，例如：
+Spring MVC Controller 中保留协议边界代码：
 
 ```text
 参数绑定
 Bean Validation
-获取当前请求调用者上下文
+读取当前请求上下文
 调用 Service
-协议层响应包装
+协议层返回
 ```
 
-不在 Controller 中编写业务状态流转、复杂数据拼装、数据库访问或业务事务。
+不在 Controller 中编写数据库访问、业务状态机、复杂业务拼装和业务事务。
 
-当前用户、部门、租户等请求绑定上下文如果业务需要，应按 `layering.md` 的边界规则取得并显式传递；不要让 Service 为了获取当前请求用户反向依赖 Web 请求对象。
+当前用户、租户、部门等请求专用信息如何进入业务层读取 `layering.md`。
 
-### 1.3 OpenAPI / Swagger 文档遵循项目现有机制
+### 1.3 OpenAPI / Swagger
 
-项目已经使用 OpenAPI / Swagger 注解或自动文档时，应同步维护真实接口描述、参数和返回契约。
+项目已经使用 OpenAPI / Swagger 时，应同步维护真实接口契约信息。
 
-但本 Skill 不统一要求：
+本 Skill 不统一要求：
 
 ```text
-每个 Controller 方法必须存在某个特定文档注解
-文档描述中必须填写作者姓名
+每个方法必须使用某个固定文档注解
+文档注解必须填写作者姓名
 ```
 
-作者和变更历史优先由 Git 记录；接口文档只保留对调用方有长期价值的契约信息。
-
-项目存在文档门禁、注解要求或代码生成约束时，以项目已有配置为准。
+作者与变更历史优先由 Git 维护。
 
 ---
 
 ## 2. Bean Validation
 
-接口结构性校验优先使用项目已有 Bean Validation 体系，例如：
+结构性约束优先使用项目已有 Bean Validation 体系：
 
 ```text
 @NotNull
@@ -184,107 +144,52 @@ Bean Validation
 @Pattern
 ```
 
-Request 需要级联校验时使用：
+嵌套对象需要级联校验时使用：
 
 ```java
 @Valid
 ```
 
-例如：
-
-```java
-public class PlaceCreateRequest {
-
-    @NotBlank
-    @Size(max = 128)
-    private String placeName;
-}
-```
-
-Bean Validation 适合表达结构约束：
+Bean Validation 适合：
 
 ```text
-不能为空
-长度范围
+非空
+长度
 数值范围
-格式约束
+格式
+结构约束
 ```
 
-业务状态、权限、数据存在性、跨字段业务语义以及需要访问数据库或外部系统才能确认的约束，由业务层处理。
-
-不要为了复用校验逻辑，把复杂业务流程塞进自定义 `ConstraintValidator`。
-
-接口校验语义读取：
-
-- [api-design.md](../api/api-design.md)
+业务状态、权限、跨数据源条件、数据库存在性等需要业务语义或外部数据的规则由业务层负责，不把完整业务流程塞入 `ConstraintValidator`。
 
 ### 2.1 避免重复结构校验
 
-已经由可信入站边界完成的结构性约束，不应在 Service / Manager 中再次使用手写 `if`、`StringUtils`、`Objects` 等方式机械重复同义校验。
+已经由可信入口通过 Bean Validation 等机制保证的同一结构约束，不在 Service / Manager 机械再写同义：
 
-例如 Request 已经声明：
-
-```java
-public class PlaceCreateRequest {
-
-    @NotBlank
-    private String placeCode;
-}
+```text
+null
+blank
+size
+pattern
 ```
 
-Controller 已经触发校验：
+判断。
 
-```java
-@PostMapping
-public ApiResponse<Void> create(
-        @Valid @RequestBody PlaceCreateRequest request) {
+例如入口已经可靠保证 `placeCode` 非空，业务层不再仅为同一非空语义重复 `StringUtils.hasText`。
 
-    placeService.create(request);
-    return ApiResponse.success();
-}
-```
+但 Service 存在多入口时，不能只因为某个 HTTP Controller 有 `@Valid` 就假设所有调用方都已校验。
 
-则普通业务流程中不要再次写：
+优先检查：
 
-```java
-if (!StringUtils.hasText(request.getPlaceCode())) {
-    throw new BusinessException("场所编号不能为空");
-}
-```
+1. 每个外部入口是否完成必要结构校验；
+2. 是否存在项目统一方法级 Validation；
+3. Service 方法是否明确承担公共输入契约。
 
-也不要把同一个必填约束改写成：
+缺少校验时修复真实缺失边界，不通过业务代码零散二次判断掩盖边界设计。
 
-```java
-Objects.requireNonNull(request.getPlaceCode());
-```
+### 2.2 不用默认值掩盖非法输入
 
-除非当前调用路径并未经过上述可信校验边界，或者这里存在与入站结构校验不同的独立契约。
-
-原则：
-
-> 一个约束由最合适的边界负责；不要为了“防御性编程”在多个层重复表达完全相同的前置条件。
-
-### 2.2 禁止用默认值掩盖无效输入
-
-对于已经声明必填或非空的字段，不得通过兜底值把非法输入悄悄转换成另一个合法值。
-
-避免：
-
-```java
-String placeCode = StringUtils.hasText(request.getPlaceCode())
-        ? request.getPlaceCode()
-        : "";
-```
-
-以及没有业务依据的：
-
-```java
-String placeCode = StringUtils.hasText(request.getPlaceCode())
-        ? request.getPlaceCode()
-        : DEFAULT_PLACE_CODE;
-```
-
-类似：
+对于已经声明必填或固定结构的字段，没有契约时不要转换：
 
 ```text
 null → ""
@@ -293,111 +198,41 @@ blank → 默认编码
 非法枚举 → 默认状态
 ```
 
-都可能把结构错误转换成新的业务语义。
+默认行为必须来自真实需求或项目既有契约。
 
-只有需求、既有契约或项目稳定实现明确规定默认行为时才能使用默认值；不得由 Agent 为了避免异常自行创造。
+### 2.3 `@Validated`
 
-### 2.3 Service 仍然负责业务校验
+需要方法级 Bean Validation 时，按目标项目已有方式使用 `@Validated`。
 
-“不重复 Bean Validation”不代表 Service 不做校验。
-
-业务层仍应负责真实业务规则，例如：
-
-```text
-@NotBlank placeCode
-→ 入站结构校验
-
-@Size(max = 128)
-→ 入站结构校验
-
-只有 PENDING 状态允许审核
-→ Service / Manager 业务校验
-
-场所编号是否已存在
-→ Service / Manager + 数据库能力
-
-当前操作人是否有权限
-→ 业务 / 权限边界
-
-数据库必须唯一
-→ UNIQUE Constraint
-```
-
-重点是区分：
-
-```text
-结构有效性
-!=
-业务有效性
-```
-
-### 2.4 多入口调用时先补齐入口校验
-
-Service 可能同时被以下入口调用：
-
-```text
-HTTP Controller
-RPC Endpoint
-Message Consumer
-Scheduled Task
-其他模块 Service / Facade
-```
-
-因此不能仅因为某个 HTTP Controller 使用了 `@Valid`，就假设所有调用方都一定完成相同结构校验。
-
-出现多入口时，优先判断：
-
-1. 每个外部入口是否已经在自己的边界完成必要结构校验；
-2. 项目是否已有统一的方法级 Validation 机制；
-3. Service 方法本身是否明确承担公共输入契约。
-
-如果确实需要方法级校验，可以按项目现有方式评估：
-
-```java
-@Service
-@Validated
-public class PlaceService {
-
-    public void create(@Valid PlaceCreateRequest request) {
-        ...
-    }
-}
-```
-
-但不要形成：
+不要机械形成：
 
 ```text
 Controller @Valid
 +
-Service @Valid
+Service @Validated / @Valid
 +
-Service 手写 StringUtils.hasText
+Service 手写同义校验
 ```
 
-三套完全相同的机械校验。
-
-原则：
-
-> 缺少校验时修复真正缺失的入口或公共契约；不要通过业务代码中的零散二次校验弥补不清晰的调用边界。
+三套完全相同约束。
 
 ---
 
 ## 3. 依赖注入
 
-新代码优先使用构造器注入。
+新代码优先构造器注入。
 
-使用 Lombok 时可以：
+例如：
 
 ```java
 @Service
 @RequiredArgsConstructor
 public class PlaceService {
-
     private final PlaceManager placeManager;
 }
 ```
 
-也可以使用显式构造器。
+也可以显式构造器。
 
 避免新增字段注入：
 
@@ -406,22 +241,15 @@ public class PlaceService {
 private PlaceManager placeManager;
 ```
 
-除非目标模块已有明确统一约定且当前任务不适合迁移。
+除非当前项目已有明确统一约定且任务不适合迁移。
 
-构造器注入有利于：
-
-* 依赖显式；
-* 不可变字段；
-* 单元测试；
-* 发现循环依赖。
-
-不要为了使用构造器注入顺带批量改造无关历史类。
+不要为了改成构造器注入顺带批量修改无关历史类。
 
 ---
 
-## 4. Spring Bean 生命周期与组件边界
+## 4. Spring Bean 生命周期
 
-需要由 Spring 管理生命周期和依赖关系的应用组件交给容器管理，例如：
+需要容器生命周期、依赖注入、代理或框架协作的组件交给 Spring 管理，例如：
 
 ```text
 @Service
@@ -431,58 +259,43 @@ private PlaceManager placeManager;
 @Configuration
 ```
 
-业务代码不得自行 `new` 本应由 Spring 管理的 Service、Manager、Client、Component 或 Configuration。
+普通 Request / Query / DTO / BO / DO / VO、值对象和纯 Java 算法类没有容器需求时不机械声明为 Bean。
 
-普通数据模型和纯 Java 值对象不受此限制。
-
-不要为了“Spring 化”机械把所有类声明为 Bean。无状态纯函数、普通转换对象、Request / Query / DTO / BO / DO / VO 等没有容器需求时不应自动进入 Spring 容器。
+业务代码不得自行 `new` 本应由 Spring 管理并依赖代理 / 生命周期的组件。
 
 原则：
 
-> 只有真实存在生命周期、依赖注入、代理或容器协作需求时才交给 Spring 管理。
+> 真实存在容器协作需求才成为 Spring Bean。
 
 ---
 
 ## 5. 配置
 
-环境和可变配置应进入目标项目已有配置体系。
+环境和可变配置进入目标项目已有配置体系。
 
-Spring Boot 常见：
-
-```text
-application.yml
-application-{profile}.yml
-```
-
-结构化配置优先考虑：
+结构化配置可以优先评估：
 
 ```java
 @ConfigurationProperties
 ```
 
-相比大量分散的：
-
-```java
-@Value("${...}")
-```
-
-更适合表达一组相关配置。
+相比大量分散 `@Value` 更适合表达一组相关配置。
 
 禁止在业务代码硬编码：
 
 * 环境地址；
-* 用户名密码；
+* 用户名 / 密码；
 * Token / Secret；
 * 私钥；
-* 环境相关开关。
+* 环境开关。
 
-已有项目使用其他配置中心或配置绑定方式时，以项目现有机制为准。
+项目使用配置中心或其他绑定机制时沿用现有方案。
 
 ---
 
-## 6. Spring Proxy 与自调用
+## 6. Spring Proxy
 
-以下常见能力通常依赖 Spring Proxy：
+以下能力常通过 Spring Proxy 实现：
 
 ```text
 @Transactional
@@ -491,7 +304,7 @@ application-{profile}.yml
 @CacheEvict
 ```
 
-同一个对象内部直接调用带这些注解的方法时，可能绕过代理。
+同一个对象内部直接调用带注解方法时，可能绕过代理。
 
 例如：
 
@@ -505,138 +318,98 @@ public void audit() {
 }
 ```
 
-不能仅因为 `audit()` 上存在 `@Transactional` 就认为自调用一定经过事务代理。
+不能仅看到 `audit()` 上有注解就认定当前自调用路径经过事务代理。
 
-使用代理能力时必须检查：
+使用代理能力时检查：
 
 * Bean 是否由 Spring 管理；
 * 调用是否经过代理；
-* 方法可见性和代理方式；
-* 是否存在自调用；
-* 项目是否有 AspectJ 或其他不同机制。
+* 方法可见性；
+* JDK / CGLIB / AspectJ 等实际机制；
+* 是否存在自调用。
 
-不要为了让注解“生效”机械拆 Bean，应先根据实际职责和项目代理方案判断。
+不要为了让注解“生效”机械拆 Bean；先判断真实职责和项目代理机制。
 
 ---
 
 ## 7. Spring 事务实现机制
 
-是否需要事务、事务应该覆盖哪些数据库操作、事务边界应该位于 Service 还是 Manager、隔离级别、传播和锁如何选择，统一读取：
+事务为什么需要、谁拥有一致性边界、传播 / 隔离 / 锁 / rollback 语义统一读取 `transactions.md`。
 
-- [transactions.md](../architecture/transactions.md)
-
-Spring 这里只负责事务设计如何通过框架机制正确落地。
+Spring 侧只负责两种实现方式。
 
 ### 7.1 `@Transactional`
 
-`@Transactional` 是声明式事务机制。
+适合清晰的方法级事务边界。
 
-Spring 侧重点检查：
+检查：
 
-* 注解是否实际经过代理；
-* 自调用是否导致失效；
-* 异常是否被吞掉导致非预期提交；
-* 配置的传播 / isolation / timeout / rollback 规则是否与事务规范一致。
+* 是否经过 Proxy；
+* 是否存在自调用；
+* `rollbackFor` / `noRollbackFor` 配置是否与事务规范和项目契约一致；
+* 异常是否被吞掉导致非预期提交。
 
-不要因为方法执行 INSERT / UPDATE / DELETE 就机械添加 `@Transactional`。
-
-本 Skill 的事务规范当前约定：新建或显著修改、并且**已经确认确实需要事务**的业务事务方法，默认使用：
-
-```java
-@Transactional(rollbackFor = Exception.class)
-```
-
-但目标项目已经存在统一事务注解、更具体的 `rollbackFor` / `noRollbackFor` 或稳定历史回滚契约时，以项目现有契约为准，不为了统一注解改变行为。
-
-`rollbackFor = Exception.class` 只定义已确定事务的回滚范围，不能替代对“是否需要事务、事务范围是否正确”的判断。
+不要因为方法执行写 SQL 就机械添加 `@Transactional`。
 
 ### 7.2 `TransactionTemplate`
 
-`TransactionTemplate` 是 Spring 的编程式事务机制，适合需要显式控制局部事务代码块的场景。
+适合显式、局部事务代码块。
 
 例如：
 
 ```java
-@Service
-@RequiredArgsConstructor
-public class PlaceService {
-
-    private final TransactionTemplate transactionTemplate;
-    private final PlaceMapper placeMapper;
-    private final AuditRecordMapper auditRecordMapper;
-
-    public void create(PlaceDO place) {
-        transactionTemplate.executeWithoutResult(status -> {
-            placeMapper.insert(place);
-            auditRecordMapper.insert(buildCreateRecord(place));
-        });
-    }
-}
+transactionTemplate.executeWithoutResult(status -> {
+    ...
+});
 ```
 
-是否应该由 Service 直接编排 Mapper 仍由 `layering.md` 判断；上例只用于说明 Spring API，不代表推荐所有业务都在 Service 直接访问 Mapper。
+Spring 机制注意：
 
-适合评估 `TransactionTemplate` 的情况：
+* 它不依赖 `@Transactional` 方法代理；
+* `rollbackFor` 不适用于 `TransactionTemplate`；
+* 回调内异常被捕获并吞掉后，不会因为“曾发生异常”自动回滚；
+* 需要显式恢复时才根据项目语义使用 `status.setRollbackOnly()`；
+* 使用哪个 `PlatformTransactionManager`、传播、隔离、超时必须与项目配置一致。
 
-```text
-一个方法只有局部数据库代码需要事务
-事务前后存在明显的远程调用 / IO / 复杂计算，需要排除在事务外
-希望事务开始和结束位置在代码中直接可见
-@TransactionaL 自调用 / Proxy 边界会使声明式事务语义难以理解
-项目本身已经统一使用编程式事务处理局部边界
-```
+`TransactionTemplate` 不决定代码应该位于 Service 还是 Manager。事务所有者由 `transactions.md` 的一致性边界决定。
 
-注意：
+原则：
 
-* `TransactionTemplate` 不依赖 `@Transactional` 的方法代理调用，因此不存在同一种自调用失效问题；
-* `rollbackFor` 是 `@Transactional` 的属性，不适用于 `TransactionTemplate`；
-* 回调异常被捕获并吞掉后，不要默认事务仍会自动回滚；需要失败时应正确传播异常，或者按明确恢复语义调用 `status.setRollbackOnly()`；
-* 不要在模板回调里放入不需要事务的 HTTP / RPC、文件 IO、等待或长耗时计算；
-* 使用哪个 `PlatformTransactionManager`、传播、隔离和超时仍应遵循项目配置和事务规范。
-
-选择原则：
-
-```text
-整个方法天然就是稳定事务边界
-→ 优先 @Transactional
-
-只有一小段代码需要事务，且显式代码块能显著缩短 / 澄清边界
-→ 评估 TransactionTemplate
-```
-
-不要为了规避代理知识或“看起来控制更精细”机械把所有声明式事务改成 `TransactionTemplate`。
+> Spring 决定事务如何生效；事务规范决定事务是否存在、覆盖什么。
 
 ---
 
-## 8. `@Async` 与异步能力
+## 8. `@Async`
 
-使用：
+使用 `@Async` 时必须同时读取 `concurrency.md`。
 
-```text
-@Async
-CompletableFuture
-Executor
-ThreadPoolTaskExecutor
-```
+Spring 侧检查：
 
-时必须读取：
-
-- [concurrency.md](../architecture/concurrency.md)
-
-Spring 侧重点包括：
-
-* `@Async` 是否经过代理；
+* 是否经过 Proxy；
 * 使用哪个 Executor；
-* 异步异常如何处理；
+* 异步异常由谁接收；
 * SecurityContext / MDC / ThreadLocal 是否有项目级传播机制。
 
-不得假设 Spring 事务或线程上下文自动传播到异步线程。
+不得假设事务和请求上下文自动传播到异步线程。
 
 ---
 
-## 9. Web 异常处理
+## 9. Cache 注解
 
-项目存在统一 Web 异常处理机制时，普通 Controller 不应重复手写：
+使用 `@Cacheable` / `@CacheEvict` 等能力时检查：
+
+* 是否经过 Proxy；
+* key 是否稳定；
+* 缓存一致性语义是否已有业务依据；
+* 是否因为自调用导致注解不生效。
+
+不要为推测性能收益机械增加缓存。
+
+---
+
+## 10. Web 异常处理
+
+项目已有统一 Web 异常处理时，普通 Controller 不重复手写：
 
 ```java
 try {
@@ -646,7 +419,7 @@ try {
 }
 ```
 
-优先复用项目已有：
+优先复用：
 
 ```text
 @RestControllerAdvice
@@ -655,33 +428,13 @@ try {
 HandlerExceptionResolver
 ```
 
-职责关系：
-
-```text
-Service / 应用代码
-       ↓
-业务或技术异常
-       ↓
-统一 Web 异常处理器
-       ↓
-HTTP 错误契约
-```
-
-异常在哪一层转换、哪里记录完整现场，读取：
-
-- [error-handling.md](../architecture/error-handling.md)
-
-错误码、错误信息、HTTP Status 和响应结构读取：
-
-- [api-design.md](../api/api-design.md)
-
-禁止在每个 Controller 创建一套局部错误响应体系。
+异常在哪层转换 / 记录读取 `error-handling.md`；HTTP 错误结构读取 `api-design.md`。
 
 ---
 
-## 10. HTTP 语义止于入站边界
+## 11. HTTP 语义止于 Web 边界
 
-业务 Service / Manager 原则上不应直接依赖：
+业务 Service / Manager 原则上不直接依赖：
 
 ```text
 HttpStatus
@@ -690,19 +443,15 @@ HttpServletRequest
 HttpServletResponse
 ```
 
-业务层表达业务语义；Web 层负责 HTTP 表达。
+这属于分层规则，详细读取 `layering.md`。
 
-这是架构边界规则，详细判断统一读取：
-
-- [layering.md](../architecture/layering.md)
-
-如果某个底层组件确实属于 Web 基础设施，应按真实职责判断，而不是仅靠类型名称机械判定。
+如果某个基础设施类本身就是 Web 技术组件，则按真实职责判断，不仅靠类型名称机械判定。
 
 ---
 
-## 11. 不要过度使用 Spring
+## 12. 不要过度使用 Spring
 
-不要为了“框架统一”机械增加：
+不要为了形式机械增加：
 
 ```text
 @Component
@@ -714,57 +463,27 @@ AOP
 自定义 Starter
 ```
 
-也不要仅为了依赖注入给一个纯数据或纯算法类增加 Spring 身份。
-
-原则：
-
-> Spring 解决容器和框架协作问题，不负责给所有 Java 类增加一层框架包装。
+Spring 解决容器与框架协作问题，不负责给所有 Java 类增加框架身份。
 
 ---
 
-## 12. Codex Spring 修改流程
+## 13. Codex Spring 检查
 
-修改 Spring 代码时：
+修改 Spring 代码时检查：
 
-1. 先按 `layering.md` 确认当前类真实职责。
-2. 查看当前模块已有 Spring 注解、路由注解位置和依赖注入风格。
-3. Controller/API 契约读取 `api-design.md`，不在 Spring 规范重复推导；不机械禁止类级 `@RequestMapping`，也不为了个人偏好迁移路由风格。
-4. 参数校验区分结构校验和业务校验；已有可信 Bean Validation 时不在 Service / Manager 机械重复同义校验。
-5. 检查必填字段是否被 `""`、`0`、默认编码或默认状态等无依据兜底掩盖。
-6. 多入口调用时确认真正缺失的是哪个入口校验或公共方法契约，不使用零散 `StringUtils` 判断代替边界设计。
-7. Controller 是否只保留协议边界所需逻辑，当前请求调用者上下文是否按分层规则传递。
-8. OpenAPI / Swagger 是否沿用项目已有文档机制，不机械要求作者注解。
-9. 新增 Bean 前确认确实需要 Spring 生命周期、依赖注入或代理能力。
-10. 使用事务能力时先读取 `transactions.md` 判断真实边界，再选择 `@Transactional` 或 `TransactionTemplate`；声明式事务检查代理与 rollback，模板事务检查局部边界、异常传播和 rollback-only。
-11. 使用 `@Async`、缓存等代理能力时检查实际代理边界。
-12. Web 异常优先复用统一 Advice / Handler，并读取 `error-handling.md`。
-13. 不硬编码环境配置和敏感凭证。
-14. 修改后执行目标项目已有相关测试和静态检查。
-
-检查重点：
-
-* Controller 是否遵循项目已有 Spring MVC 风格；
-* 路由注解位置是否与模块保持一致，是否存在难以理解的多级 Mapping；
-* 是否机械规定只能 GET / POST 或机械反对项目已有 REST 风格；
-* `@Valid` / Bean Validation 是否用于结构性约束；
-* 已完成 Bean Validation 的字段是否又在业务层进行同义 `null` / blank / size 校验；
-* 是否通过 `StringUtils.hasText(...) ? value : defaultValue` 等方式掩盖本应拒绝的无效输入；
-* 是否把结构校验和业务校验混为一谈；
-* 多入口场景是否遗漏真正的入口校验；
-* Controller 是否包含业务逻辑、数据库访问或复杂业务数据拼装；
-* 是否让 Service / Manager 直接读取请求专用上下文；
-* 是否新增字段注入；
-* 是否自行 `new` Spring 管理组件；
-* 是否创建无必要 Spring Bean；
-* 是否硬编码环境配置；
-* `@Transactional` / `@Async` / `@Cacheable` 是否可能因自调用绕过代理；
-* 已确认需要的新增声明式业务事务是否按事务规范明确 rollbackFor，是否无授权覆盖项目更具体回滚契约；
-* `TransactionTemplate` 是否只覆盖必要代码块，回调异常是否被吞掉而未正确决定回滚；
-* 是否为了绕过代理或个人偏好机械把 `@Transactional` 改成 `TransactionTemplate`；
-* Web 异常是否重复在 Controller 手工处理；
-* Service / Manager 是否无必要依赖 HTTP 类型；
-* 是否为了 Spring 形式顺带改造无关代码。
+1. Controller 是否只承担协议边界职责。
+2. Mapping 注解是否遵循项目已有机制，最终 URL 是否清楚。
+3. Bean Validation 是否表达结构约束，是否在业务层机械重复。
+4. 多入口时真正的校验边界是否完整。
+5. 是否通过默认值掩盖非法输入。
+6. 依赖注入和 Bean 生命周期是否合理。
+7. 环境配置和凭证是否进入正确配置机制。
+8. `@Transactional` / `@Async` / Cache 是否真正经过 Proxy。
+9. 事务是否被 Spring API 形式反向决定分层；`TransactionTemplate` 是否只作为实现手段。
+10. Web 异常是否复用统一 Advice / Handler。
+11. 是否让业务层无必要依赖 HTTP 类型。
+12. 是否为了 Spring 形式扩大无关改动。
 
 最终原则：
 
-> 分层规范决定组件职责，API 规范决定 HTTP 契约，事务和并发专项规范决定行为边界；Spring 规范只负责这些设计在 Spring 框架中的正确实现。结构性约束由合适的可信边界统一保证，业务层不机械二次校验，也不通过无依据默认值掩盖非法输入。
+> Spring reference 只维护框架机制；分层、API、事务、并发和异常的业务语义由各自 reference 唯一维护。
