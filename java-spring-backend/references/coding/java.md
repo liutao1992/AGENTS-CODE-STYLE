@@ -755,6 +755,73 @@ log.info("place created, placeId={}", placeId);
 
 优先遵循目标项目已有 formatter、Checkstyle、Spotless、IDE 配置和附近代码风格。
 
+如果项目没有更具体的自动格式化规则，使用以下默认格式。
+
+### 14.1 相邻方法之间保留空行
+
+类、接口、枚举等类型中的相邻方法声明或方法实现之间，默认保留一个空行，避免成员连续堆叠导致阅读困难。
+
+避免：
+
+```java
+public interface PlaceQueryMapper {
+    List<PlaceRecordDO> selectPage(PlaceQuery query);
+    long count(PlaceQuery query);
+    PlaceRecordDO selectDetail(@Param("id") String id, @Param("scope") String scope);
+    PlaceStatsDO selectStats();
+    List<PlaceTreeNodeDO> selectTree();
+}
+```
+
+推荐：
+
+```java
+public interface PlaceQueryMapper {
+
+    List<PlaceRecordDO> selectPage(PlaceQuery query);
+
+    long count(PlaceQuery query);
+
+    PlaceRecordDO selectDetail(
+            @Param("id") String id,
+            @Param("scope") String scope);
+
+    PlaceStatsDO selectStats();
+
+    List<PlaceTreeNodeDO> selectTree();
+}
+```
+
+同一方法上的注解与方法声明属于一个整体，不在注解和方法之间插入无意义空行。
+
+原则：
+
+> 空行用于分隔独立成员和阅读单元，不为了压缩文件把多个方法声明连续堆在一起。
+
+### 14.2 长方法签名按参数换行
+
+方法声明在一行中过长、参数带多个注解、泛型较复杂，或明显降低可读性时，应主动换行，不要求把完整签名强行压在一行。
+
+推荐：
+
+```java
+PlaceRecordDO selectDetail(
+        @Param("id") String id,
+        @Param("scope") String scope);
+```
+
+多个参数换行后，默认一个参数一行，并保持统一缩进。方法调用、构造器调用也遵循相同可读性原则。
+
+不要为了减少代码行数写成：
+
+```java
+PlaceRecordDO selectDetail(@Param("id") String id, @Param("scope") String scope);
+```
+
+如果目标项目 formatter 对最大行宽、续行缩进、参数换行已有明确配置，以自动格式化结果为准，不与 formatter 对抗。
+
+### 14.3 控制语句使用大括号
+
 控制语句统一使用大括号，避免：
 
 ```java
@@ -763,7 +830,9 @@ if (condition) return;
 
 在复杂业务代码中形成维护风险。
 
-不要因为当前任务顺手格式化整个文件或模块，避免制造无关 diff。
+### 14.4 不扩大无关格式化范围
+
+新增或修改代码本身应符合当前文件格式，但不要因为当前任务顺手格式化整个文件或模块，避免制造无关 diff。
 
 ---
 
@@ -783,7 +852,8 @@ if (condition) return;
 10. Optional、泛型、BigDecimal、时间语义是否正确。
 11. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
 12. 日志是否泄漏敏感数据。
-13. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
+13. 相邻方法之间是否保留清晰空行；过长方法签名是否按参数合理换行，并遵循项目 formatter。
+14. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
 
 最终原则：
 
