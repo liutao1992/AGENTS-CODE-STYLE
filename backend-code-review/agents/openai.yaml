@@ -1,6 +1,6 @@
 interface:
   display_name: "后端代码审查"
-  short_description: "审查 Java 后端变更的分层、SOLID、模型、SQL 与事务问题，提供定位和证据"
-  default_prompt: "使用 $backend-code-review 审查当前后端变更，检查分层、SOLID、模型、SQL、事务等问题，并按严重程度报告有证据的问题和验证范围。"
+  short_description: "按需加载团队后端规范审查 Java/Spring/MyBatis/PostgreSQL 变更，输出有触发条件、定位和证据的 findings"
+  default_prompt: "使用 $backend-code-review 审查当前后端变更；先确认 staged、unstaged 和相关新增文件范围，按需加载 reference，并按严重程度报告有证据的问题和实际验证范围。"
 policy:
   allow_implicit_invocation: true
