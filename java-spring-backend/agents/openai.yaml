@@ -1,6 +1,6 @@
 interface:
   display_name: "Java Spring 后端开发"
-  short_description: "按团队规范实现与修复 Java 后端，按需加载分层、模型、事务和数据库规则"
-  default_prompt: "使用 $java-spring-backend 按项目现有设计完成当前后端任务，并执行相关验证。"
+  short_description: "按团队规范开发 Java/Spring 后端，按需加载模块结构、分层、API、MyBatis/SQL、事务、并发与测试规则"
+  default_prompt: "使用 $java-spring-backend 按目标项目现有设计完成当前后端任务；先判断职责并按需加载对应 reference，只做必要变更并执行相关验证。"
 policy:
   allow_implicit_invocation: true
