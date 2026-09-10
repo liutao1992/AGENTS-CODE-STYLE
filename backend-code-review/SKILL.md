@@ -1,6 +1,6 @@
 ---
 name: backend-code-review
-description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变更，按需加载团队规范，检查正确性、分层、API、数据库、事务、并发、安全和测试，并输出有定位与证据的 findings；纯审查默认只读。
+description: 审查 Java、Spring Boot、MyBatis、MyBatis-Plus、Rabbit-SQL、PostgreSQL 后端代码或变更，按需加载团队规范，检查正确性、分层、API、数据库、事务、并发、安全和测试，并输出有定位与证据的 findings；纯审查默认只读。
 ---
 
 # Backend Code Review
@@ -18,7 +18,7 @@ description: 审查 Java、Spring Boot、MyBatis、PostgreSQL 后端代码或变
 输出格式
 ```
 
-具体 Java、分层、API、Spring、MyBatis、SQL、数据库、事务、并发和测试规则直接读取 `java-spring-backend/references`，不在本文件维护第二套规范。
+具体 Java、分层、API、Spring、MyBatis、Rabbit-SQL、SQL、数据库、事务、并发和测试规则直接读取 `java-spring-backend/references`，不在本文件维护第二套规范。
 
 ---
 
@@ -72,7 +72,7 @@ staged changes
 1. **确认范围。** 明确本次审查对象及是否包含 staged / unstaged / untracked。
 2. **阅读完整差异。** 不只看单行 patch；读取受影响方法、调用者、模型、SQL、配置和相关测试。
 3. **建立项目上下文。** 搜索类似实现、已有契约、构建配置和可用近期 Git 历史；不存在时如实说明。
-4. **选择规范。** 按路由表只加载实际涉及的 references，不递归加载全部规范。
+4. **选择规范。** 按路由表只加载实际涉及的 references，不递归加载全部规范。遇到 Mapper / DAO 时先识别实际持久层框架，不凭名称假定是 MyBatis。
 5. **沿数据流验证。** 确认输入从哪里来、经过哪些层、最终影响什么状态或契约。
 6. **区分新旧问题。** 优先报告本次引入或加剧的问题；既有无关问题不混入 findings。
 7. **必要验证。** 运行与范围相关、不会无授权改写代码或共享环境的已有测试、静态检查和架构检查。
@@ -90,7 +90,8 @@ staged changes
 | Spring Framework | [Spring](../java-spring-backend/references/coding/spring.md) | MVC、Validation、DI、Bean、Proxy、Advice |
 | HTTP API | [API](../java-spring-backend/references/api/api-design.md) | URL、Method、Request/VO、响应、错误、兼容、分页、幂等 |
 | 异常跨层 | [异常处理](../java-spring-backend/references/architecture/error-handling.md) | 转换、cause、日志归属、对外泄漏 |
-| MyBatis / MyBatis-Plus | [MyBatis / MyBatis-Plus](../java-spring-backend/references/coding/mybatis.md) | Mapper/DAO、BaseMapper、Wrapper、XML 业务常量、绑定、ResultMap、TypeHandler、集合契约 |
+| MyBatis / MyBatis-Plus | [MyBatis / MyBatis-Plus](../java-spring-backend/references/coding/mybatis.md) | MyBatis Mapper/DAO、BaseMapper、Wrapper、Mapper XML、绑定、ResultMap、TypeHandler、集合契约 |
+| Rabbit-SQL | [Rabbit-SQL](../java-spring-backend/references/coding/rabbit-sql.md) | `@XQLMapper`、Baki、XQL 注册/映射、参数绑定、`${}`、动态 XQL、分页、Stream、Batch、Spring 事务接入 |
 | SQL | [SQL](../java-spring-backend/references/database/sql.md) | 正确性、范围、注入、安全、PostgreSQL、性能证据 |
 | 数据库 Schema | [数据库设计](../java-spring-backend/references/database/database-design.md) | 类型、Null、约束、索引、Migration、兼容 |
 | 事务 / 锁 / 一致性 | [事务](../java-spring-backend/references/architecture/transactions.md) | 必要性、范围、回滚、传播、隔离、竞态 |
@@ -121,6 +122,15 @@ MyBatis-Plus Mapper 未继承 BaseMapper，或出现 Wrapper 条件构建
 
 Mapper XML 写死业务状态 / 类型编码
 → MyBatis；如果同时判断 SQL 正确性再加 SQL
+
+@XQLMapper / Baki / .xql / xql-file-manager.yml 变化
+→ Rabbit-SQL；修改实际 SQL 再加 SQL
+
+Rabbit-SQL `${}` 接收外部输入、动态 XQL、分页 count、Stream 资源生命周期
+→ Rabbit-SQL + 必要的 SQL / Java
+
+Rabbit-SQL Spring 事务变化
+→ Rabbit-SQL + 事务 + 必要的 Spring
 
 TransactionTemplate 局部事务
 → 事务 + Spring
@@ -168,6 +178,7 @@ reference 中的默认推荐不能自动覆盖目标项目已有稳定约定。
 API / 序列化契约
 模型与 Package 约定
 module 结构
+持久层框架与 SQL 资源组织
 Spring MVC 风格
 Validation 边界
 异常和日志体系
@@ -241,6 +252,24 @@ SQL 结构上明确存在 N+1、无界查询、错误索引假设等风险时，
 详细规则读取 `transactions.md`。
 
 不能因为存在两个 Mapper、存在写操作或没有 `@Transactional` 就自动报告事务问题。必须指出哪些操作需要共同成功/回滚，以及当前实现如何破坏该一致性需求。
+
+### 7.6 持久层框架误判
+
+接口叫 `Mapper` / `DAO` 不能证明它属于 MyBatis。
+
+审查前应检查：
+
+```text
+依赖
+import / 注解
+Mapper XML / .xql
+BaseMapper / @XQLMapper
+Baki / MyBatis API
+```
+
+确认实际框架后再加载对应 reference。
+
+不得对 Rabbit-SQL `@XQLMapper` 报告“未继承 MyBatis-Plus BaseMapper”，也不得把 MyBatis Mapper XML 按 XQL 规则审查。
 
 ---
 
