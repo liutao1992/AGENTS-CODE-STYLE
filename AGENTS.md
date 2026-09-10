@@ -9,7 +9,7 @@
 3. 新增类或组件前先搜索现有实现；先判断职责和模型类型，再确定 Package，最后创建文件。能复用就不新建。
 4. 不自行创造业务状态、业务编码、默认值或兼容规则；代码中不得散落带业务 / 技术语义的魔法值，固定有限值域优先使用 Enum，跨类常量按职责分类维护，不建立大而全常量仓库；Request / Query（默认同属 `<module>.request` Package）、DTO / BO / DO / VO 等 POJO 不设置字段默认值。未经明确需求，不改变 API、字段、状态流转、权限、数据范围、删除语义、事务语义或数据库约束。
 5. Controller 不得直接访问 Mapper / DAO；HTTP 语义不得进入 Service / Manager；下层不得反向依赖上层；跨模块优先通过对方 Service / Facade。Manager 按需设置。
-6. 数据库对象使用小写汉语拼音与下划线，优先复用已有术语；Java 使用英文业务语义。DO 属性也优先使用英文，通过 Mapper / ResultMap 显式映射，数据库拼音不得泄漏到业务模型和 API。
+6. 数据库对象使用小写汉语拼音与下划线，优先复用已有术语；Java 使用英文业务语义。DO 属性也优先使用英文，通过持久层显式映射（如 SQL 列别名、MyBatis ResultMap）隔离数据库物理命名，数据库拼音不得泄漏到业务模型和 API。
 7. 具体业务接口输出优先使用 VO；统一 HTTP 响应包装默认使用 `ApiResponse<T>`。如果目标项目已有其他统一响应类型、历史 API 或序列化契约，以项目现有约定为准，不得为了套用规范强制迁移。不得把所有数据模型统一归入 DTO。
 8. 已由可信入站边界通过 Bean Validation 等机制保证的结构性约束，不在 Service / Manager 机械重复同义的 null、blank、size 等校验；多入口场景补齐真正缺失的入口或公共契约。不得通过空字符串、0、默认编码或默认状态等无依据兜底掩盖本应拒绝的非法输入。
 9. 已有明确非 Null 集合契约时，上层不得机械增加 `list == null ? emptyList : list`、`Optional.ofNullable(list)` 等防御；集合无结果优先用空集合表达。外部或遗留来源确实允许 Null 时，应在最靠近来源的边界归一化一次，不在 Service / Manager 层层兜底。
@@ -22,7 +22,7 @@
 
 ## 技能入口
 
-- Java / Spring Boot / MyBatis / PostgreSQL 开发、修复和重构：使用 [java-spring-backend](java-spring-backend/SKILL.md)。
+- Java / Spring Boot / MyBatis / MyBatis-Plus / Rabbit-SQL / PostgreSQL 开发、修复和重构：使用 [java-spring-backend](java-spring-backend/SKILL.md)。
 - 后端代码审查：使用 [backend-code-review](backend-code-review/SKILL.md)。
 - 开发完成后按审查 Skill 自检当前变更，不自动创建独立代理，也不重复运行已经通过且未受后续修改影响的检查。
 
