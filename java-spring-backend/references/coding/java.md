@@ -64,7 +64,7 @@ workQueue
 
 不要机械添加 `String`、`Integer` 等无价值类型后缀。
 
-### 1.3 常量
+### 1.3 常量与魔法值
 
 常量使用 `UPPER_SNAKE_CASE`：
 
@@ -72,7 +72,68 @@ workQueue
 private static final int MAX_RETRY_COUNT = 3;
 ```
 
-只有具有稳定业务或技术语义的固定值才提取常量，不把所有 `0 / 1 / -1` 机械常量化。
+【强制】代码中不得直接出现带有业务或技术语义、但没有预先命名说明的魔法值。
+
+所谓魔法值，是指某个固定字面量承担了状态、类型、阈值、超时、重试次数、缓存时间、业务编码等实际语义，但读者只能依赖上下文猜测它的含义。
+
+避免：
+
+```java
+if ("1".equals(status)) {
+    ...
+}
+
+if (retryCount >= 3) {
+    ...
+}
+
+cache.put(key, value, 300);
+```
+
+应优先使用有名称的常量或 Enum：
+
+```java
+if (PlaceStatus.ENABLED.getCode().equals(status)) {
+    ...
+}
+
+if (retryCount >= MAX_RETRY_COUNT) {
+    ...
+}
+
+cache.put(key, value, CacheConsts.PLACE_DETAIL_TTL_SECONDS);
+```
+
+以下类型的值通常需要先命名再使用：
+
+```text
+业务状态 / 类型编码
+权限 / 来源编码
+缓存 TTL
+超时时间
+重试次数
+批处理阈值
+固定业务比例
+具有业务意义的数字或字符串
+```
+
+“禁止魔法值”不等于把所有 Java 字面量机械抽成常量。没有独立业务 / 技术语义、含义由语言结构本身即可理解的值可以直接使用，例如：
+
+```java
+for (int i = 0; i < items.size(); i++) {
+    ...
+}
+
+if (name.isEmpty()) {
+    ...
+}
+```
+
+是否提取常量的判断重点是：
+
+> 这个值如果变化，维护者是否需要先知道“它代表什么”才能安全修改？
+
+如果答案是“需要”，就不应以匿名字面量散落在代码中。
 
 ### 1.4 Package
 
@@ -385,7 +446,7 @@ public class PlaceDetailVO {
 
 同样，`@NoArgsConstructor` 不是所有类的默认要求。不可变对象、必须在构造阶段满足不变式的对象，不应为了 JavaBean 形式无依据增加无参构造器。
 
-不要使用 `@Builder.Default` 自行创造业务默认值。Builder 中的默认值仍必须来自明确需求或稳定契约。
+对于 Request / Query / DTO / BO / DO / VO 等 POJO，不使用 `@Builder.Default` 设置属性默认值；具体默认值规则读取 3.5 节。
 
 Builder 只负责对象构造，不替代业务行为。例如需要状态校验的：
 
@@ -427,17 +488,58 @@ PlaceDO.builder()
 
 不得为了统一风格批量改变已有 API / 数据库 Null 语义。
 
-### 3.5 不自行增加业务默认值
+### 3.5 POJO 不设置属性默认值
 
-没有明确契约时，模型字段不得自行初始化：
+【强制】定义 Request、Query、DTO、BO、DO、VO 等 POJO 时，默认不在字段声明或 Builder 中设置属性默认值。
+
+禁止新建：
 
 ```java
 private Boolean enabled = true;
+private Integer sortOrder = 0;
 private String status = "PENDING";
 private LocalDateTime createTime = LocalDateTime.now();
 ```
 
-默认值必须来自需求、项目稳定约定或数据库明确职责。
+也禁止通过：
+
+```java
+@Builder.Default
+private Boolean enabled = true;
+```
+
+把业务默认值隐藏进模型构造过程。
+
+POJO 的职责是承载数据，不应在对象定义处悄悄决定：
+
+```text
+业务状态
+默认开关
+默认编码
+当前时间
+默认排序值
+```
+
+如果业务确实存在默认值，应由明确拥有该语义的边界处理，例如：
+
+```text
+Controller / 入站转换
+→ 协议明确规定的请求默认语义
+
+Service / Manager
+→ 业务规则决定的默认状态或值
+
+Database
+→ 数据库负责且已明确约定的 DEFAULT
+```
+
+不要在多个边界重复设置同一默认值。
+
+已有历史模型如果字段默认值已经构成稳定序列化、持久化或业务契约，不为了本规则无授权批量删除；新建模型或当前任务明确调整该模型语义时按本规则执行。
+
+原则：
+
+> POJO 只承载值，不隐藏业务默认决策；默认值由真正拥有该语义的边界显式产生。
 
 ### 3.6 `toString` 与敏感信息
 
@@ -447,25 +549,104 @@ private LocalDateTime createTime = LocalDateTime.now();
 
 ## 4. 常量与枚举
 
-具有稳定有限取值集合时可以使用枚举，但不得自行创造业务状态、编码、别名或兼容规则。
+### 4.1 常量按职责和功能分类
 
-已有 API、数据库和项目枚举体系优先。
+不要使用一个大而全的常量类维护整个项目的所有常量。
 
-避免无限增长的：
+禁止长期增长的：
 
 ```text
 Constants
 CommonConstants
 GlobalConstants
+SystemConstants
 ```
 
-常量应跟随真正拥有其语义的职责归类。
+如果一个常量只属于某个类的内部实现，优先直接作为该类的 `private static final` 成员。
+
+跨类复用的常量按照真实功能和语义归类到职责明确的常量类。例如：
+
+```text
+CacheConsts
+SystemConfigConsts
+FileUploadConsts
+PlaceConsts
+```
+
+典型关系：
+
+```text
+缓存相关常量
+→ CacheConsts
+
+系统配置相关常量
+→ SystemConfigConsts
+
+文件上传技术限制
+→ FileUploadConsts
+
+Place 模块稳定业务常量
+→ PlaceConsts
+```
+
+常量类不能因为“很多地方都能用”就进入一个无边界的公共垃圾桶。业务常量优先跟随拥有其语义的业务模块；真正跨模块且稳定的技术常量才进入公共技术边界。
+
+也不要为了“分类”把每一个常量都创建一个新类。分类粒度以能够用一个清楚的职责名称解释该组常量为准。
+
+原则：
+
+> 常量跟随语义所有者；宁可按职责形成少量清晰常量组，也不要建立一个全局常量仓库。
+
+### 4.2 固定取值范围优先使用 Enum
+
+如果一个变量的合法值只会在一个明确、固定、有限的范围内变化，优先使用 Enum 表达，而不是散落字符串或数字常量。
+
+例如：
+
+```java
+public enum PlaceStatus {
+    DRAFT,
+    ENABLED,
+    DISABLED
+}
+```
+
+典型场景包括：
+
+```text
+业务状态
+审核结果
+固定业务类型
+固定来源类型
+有限操作类型
+```
+
+如果数据库或外部 API 已经使用稳定编码，可以由 Enum 显式承载和转换该编码，而不是因此继续在业务代码中散落：
+
+```text
+"0"
+"1"
+"PENDING"
+"FORMAL"
+```
+
+Enum 不适用于实际上开放增长、由配置中心动态增加、由外部系统随时扩展且本应用不拥有全集的值域；这种场景应按真实契约建模，不为了使用 Enum 假装值域固定。
+
+也不得自行发明目标项目不存在的业务状态、编码或兼容映射。
+
+原则：
+
+> 值域真正固定时用类型系统表达范围；值域由外部或配置动态决定时尊重真实契约。
+
+### 4.3 数值字面量
 
 `long` 字面量使用大写 `L`：
 
 ```java
 1000L
 ```
+
+涉及具有业务 / 技术语义的数值时，同时遵守 1.3 的魔法值规则。
 
 ---
 
@@ -933,19 +1114,23 @@ if (condition) return;
 
 1. 名称是否表达真实英文业务语义，JavaBean 是否使用职责明确的 Request / Query / DTO / BO / DO / VO 等命名，而不是泛化 `Bean / Info / Data / Model`；Query 是否因为类名被无依据拆到独立 `query` Package。
 2. 真实使用 Strategy / Factory / Adapter / Builder / Handler / Command / Visitor 等设计模式时，类型、技术子模块和方法是否体现其模式角色；是否反过来为了名称伪造不需要的设计模式。
-3. 新类是否有真实独立职责，是否已搜索现有实现。
-4. 模型是否沿用项目 `class` / Lombok 风格，是否机械使用 `@Data` / `record`。
-5. 使用 `@Builder` / `@NoArgsConstructor` 是否来自真实对象构造和框架实例化需求；类级 Builder 是否具有可用构造路径，是否破坏对象不变式或业务规则。
-6. 方法参数是否过多；封装是否基于完整语义、来源、生命周期和信任边界，而不是凑参数数量。
-7. 普通查询条件是否已经适合 Query。
-8. 方法是否因职责混杂而过长，而不是仅根据行数机械拆分。
-9. 已有非 Null 集合契约时是否仍存在重复 Null 防御。
-10. 是否通过默认值或 fallback 掩盖错误。
-11. Optional、泛型、BigDecimal、时间语义是否正确。
-12. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
-13. 日志是否泄漏敏感数据。
-14. 相邻方法之间是否保留清晰空行；方法签名是否能清晰单行时保持单行，只在真正过长或复杂时合理换行。
-15. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
+3. 是否存在带业务 / 技术语义的魔法值；需要说明含义的固定值是否已提取为职责明确的常量或 Enum。
+4. 常量是否按功能和语义归类；是否把所有常量塞入 `Constants / CommonConstants / GlobalConstants` 等大而全常量类。
+5. 固定有限值域是否适合 Enum；是否错误把动态配置或外部开放值域强行枚举化。
+6. Request / Query / DTO / BO / DO / VO 等 POJO 是否设置了字段初始化值或 `@Builder.Default`，从而隐藏默认业务语义。
+7. 新类是否有真实独立职责，是否已搜索现有实现。
+8. 模型是否沿用项目 `class` / Lombok 风格，是否机械使用 `@Data` / `record`。
+9. 使用 `@Builder` / `@NoArgsConstructor` 是否来自真实对象构造和框架实例化需求；类级 Builder 是否具有可用构造路径，是否破坏对象不变式或业务规则。
+10. 方法参数是否过多；封装是否基于完整语义、来源、生命周期和信任边界，而不是凑参数数量。
+11. 普通查询条件是否已经适合 Query。
+12. 方法是否因职责混杂而过长，而不是仅根据行数机械拆分。
+13. 已有非 Null 集合契约时是否仍存在重复 Null 防御。
+14. 是否通过默认值或 fallback 掩盖错误。
+15. Optional、泛型、BigDecimal、时间语义是否正确。
+16. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
+17. 日志是否泄漏敏感数据。
+18. 相邻方法之间是否保留清晰空行；方法签名是否能清晰单行时保持单行，只在真正过长或复杂时合理换行。
+19. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
 
 最终原则：
 
