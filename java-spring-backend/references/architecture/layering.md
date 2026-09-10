@@ -304,7 +304,79 @@ process
 doSomething
 ```
 
-## 4.1 Service 拆分
+## 4.1 Service 方法命名
+
+对于普通 CRUD / 查询型业务能力，在目标项目没有更具体稳定约定时，优先使用以下前缀：
+
+```text
+获取单个对象 → get
+获取多个对象 → list
+获取统计数量 → count
+新增 / 保存   → save
+删除         → remove
+修改         → update
+```
+
+例如：
+
+```java
+PlaceVO getPlace(String id);
+
+List<PlaceVO> listPlaces(PlaceQuery query);
+
+long countPlaces(PlaceQuery query);
+
+void savePlace(PlaceSaveRequest request);
+
+void removePlace(String id);
+
+void updatePlace(PlaceUpdateRequest request);
+```
+
+集合方法使用 `list` 前缀。直接表达资源集合时优先使用复数名词，例如：
+
+```text
+listPlaces
+listCases
+listEquipmentItems
+```
+
+如果方法重点在查询条件或筛选语义，可以使用：
+
+```text
+listByStatus
+listByQuery
+listAvailablePlaces
+```
+
+不要为了满足“复数结尾”而牺牲更明确的业务语义。
+
+`save` 表达 Service 层的新增 / 保存业务动作；如果新增和修改具有不同业务语义，应分别使用职责更明确的方法，不把所有写操作都模糊成 `save`。
+
+真实业务动作优先于 CRUD 模板。例如：
+
+```text
+auditPlace
+approveCase
+rejectCase
+registerCase
+bindEquipment
+```
+
+这些名称已经准确表达业务用例时，不应为了统一前缀机械改成：
+
+```text
+updatePlace
+saveCase
+```
+
+Mapper / DAO 的数据访问方法命名由 `mybatis.md` 维护，Service 不为了与数据库操作一一对应而使用 `insert` / `delete` 等持久化术语。
+
+原则：
+
+> CRUD 型 Service 使用稳定前缀降低理解成本；存在明确业务动作时优先表达业务语义，不让命名模板覆盖真实用例。
+
+## 4.2 Service 拆分
 
 Service 变大只是信号。只有出现能够独立命名、独立变化的业务用例时才按业务能力拆分，例如：
 
