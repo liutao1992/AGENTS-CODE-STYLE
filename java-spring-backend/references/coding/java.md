@@ -455,9 +455,7 @@ public String signEnvelope(SignEnvelopeDTO signEnvelope) {
 但来源或信任边界明显不同的数据不要为了“单参数”强行合并。例如：
 
 ```java
-public void audit(
-        PlaceAuditRequest request,
-        Operator operator) {
+public void audit(PlaceAuditRequest request, Operator operator) {
     ...
 }
 ```
@@ -782,9 +780,7 @@ public interface PlaceQueryMapper {
 
     long count(PlaceQuery query);
 
-    PlaceRecordDO selectDetail(
-            @Param("id") String id,
-            @Param("scope") String scope);
+    PlaceRecordDO selectDetail(@Param("id") String id, @Param("scope") String scope);
 
     PlaceStatsDO selectStats();
 
@@ -798,25 +794,38 @@ public interface PlaceQueryMapper {
 
 > 空行用于分隔独立成员和阅读单元，不为了压缩文件把多个方法声明连续堆在一起。
 
-### 14.2 长方法签名按参数换行
+### 14.2 方法签名优先保持单行
 
-方法声明在一行中过长、参数带多个注解、泛型较复杂，或明显降低可读性时，应主动换行，不要求把完整签名强行压在一行。
+方法声明能够在项目行宽内清晰表达时，优先保持单行。不要因为存在两个或三个普通参数、参数带简单注解，就机械拆成多行。
 
 推荐：
 
 ```java
-PlaceRecordDO selectDetail(
-        @Param("id") String id,
-        @Param("scope") String scope);
-```
-
-多个参数换行后，默认一个参数一行，并保持统一缩进。方法调用、构造器调用也遵循相同可读性原则。
-
-不要为了减少代码行数写成：
-
-```java
 PlaceRecordDO selectDetail(@Param("id") String id, @Param("scope") String scope);
 ```
+
+只有出现以下情况之一时再换行：
+
+* 超过项目 formatter 或团队约定的行宽；
+* 参数数量较多；
+* 参数类型、泛型或注解较复杂；
+* 单行已经明显降低可读性。
+
+例如：
+
+```java
+int updateStatus(
+        @Param("organizationCode") String organizationCode,
+        @Param("placeCode") String placeCode,
+        @Param("expectedStatus") String expectedStatus,
+        @Param("targetStatus") String targetStatus);
+```
+
+一旦决定换行，默认一个参数一行，并保持统一缩进。方法调用、构造器调用遵循相同原则。
+
+原则：
+
+> 能清晰放一行就保持一行；只有真正过长或复杂时才换行，不为了“格式统一”机械增加垂直空间。
 
 如果目标项目 formatter 对最大行宽、续行缩进、参数换行已有明确配置，以自动格式化结果为准，不与 formatter 对抗。
 
@@ -852,7 +861,7 @@ if (condition) return;
 10. Optional、泛型、BigDecimal、时间语义是否正确。
 11. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
 12. 日志是否泄漏敏感数据。
-13. 相邻方法之间是否保留清晰空行；过长方法签名是否按参数合理换行，并遵循项目 formatter。
+13. 相邻方法之间是否保留清晰空行；方法签名是否能清晰单行时保持单行，只在真正过长或复杂时合理换行。
 14. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
 
 最终原则：
