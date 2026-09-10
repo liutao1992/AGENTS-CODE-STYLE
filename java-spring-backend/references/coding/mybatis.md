@@ -162,23 +162,83 @@ MyBatis Configuration
 
 ---
 
-## 5. Mapper 方法命名
+## 5. Mapper / DAO 方法命名
 
-方法名应表达明确的数据访问意图。
+Mapper / DAO 方法名应直接表达数据访问意图。在目标项目没有更具体稳定约定时，自定义数据访问方法默认使用以下前缀：
+
+```text
+获取单个对象 → get
+获取多个对象 → list
+获取统计数量 → count
+插入         → insert
+删除         → delete
+修改         → update
+```
 
 例如：
 
 ```text
 getById
 getByCode
+listPlaces
 listByQuery
 listByStatus
 countByQuery
-existsByCode
+countByStatus
 insert
+insertBatch
 update
+updateStatus
+deleteById
+deleteByStatus
+```
+
+获取单个对象的方法使用 `get` 前缀；不要使用含义不清的：
+
+```text
+queryOne
+findData
+loadInfo
+```
+
+集合查询使用 `list` 前缀。直接表达实体集合时可以使用复数名词：
+
+```text
+listPlaces
+listCases
+```
+
+如果方法重点在查询条件，则 `listByStatus`、`listByQuery` 等形式同样允许，不为了满足“复数结尾”牺牲条件语义。
+
+统计数量使用 `count` 前缀，例如：
+
+```text
+countByQuery
+countByStatus
+```
+
+写操作按持久化语义使用：
+
+```text
+insert...
+delete...
+update...
+```
+
+Service 层的新增 / 删除业务动作默认使用 `save` / `remove`；Mapper / DAO 使用 `insert` / `delete`，避免把业务动作和数据库操作术语混在同一层。Service 方法命名读取 `layering.md`。
+
+MyBatis-Plus `BaseMapper` 已定义的框架方法保持其原始命名，例如：
+
+```text
+selectById
+selectList
+selectCount
+insert
+updateById
 deleteById
 ```
+
+不得为了本规范重新包装一层只做改名的方法。本文命名规则主要约束项目自定义 Mapper / DAO 方法。
 
 避免：
 
@@ -189,7 +249,9 @@ doQuery
 executeBusiness
 ```
 
-Mapper 方法表达“访问什么数据、按什么条件访问”，不表达完整业务流程。
+原则：
+
+> 自定义 Mapper / DAO 使用稳定的数据访问动词；名称表达“访问什么数据、按什么条件访问”，不表达完整业务流程，也不为了命名形式包装框架已有能力。
 
 ---
 
@@ -710,22 +772,25 @@ MyBatis 任务如果修改了 SQL，应同时加载 `sql.md`；如果只调整 B
 1. 判断是 Mapper 接口、Mapper XML、BaseMapper、ResultMap、TypeHandler 还是其他 MyBatis 基础设施。
 2. 搜索当前项目已有类似实现。
 3. 新增组件前按职责确定 Package。
-4. 项目使用 MyBatis-Plus 时，检查实体 Mapper / DAO 是否继承 `BaseMapper<DO>`，是否重复声明基础 CRUD。
-5. 检查是否使用 `QueryWrapper`、`LambdaQueryWrapper`、`UpdateWrapper` 等 Wrapper；业务条件 SQL 应改为明确 Mapper 方法 + XML。
-6. 检查 XML 是否硬编码业务状态、类型、来源等业务常量；应由 Mapper 参数传入。
-7. 检查参数是否应使用 `#{}`，`${}` 是否确实属于结构并经过白名单。
-8. 检查集合 Mapper 的 Null 契约；标准集合查询无结果不在上层机械增加 Null 兜底。
-9. 检查数据库列与 Java 属性的映射是否明确。
-10. 检查 TypeHandler 是否只承担技术转换。
-11. 动态 SQL 是否清晰且没有隐藏业务流程。
-12. 修改 SQL 时同时读取 `sql.md`。
-13. 涉及事务时读取 `transactions.md`。
-14. 执行目标项目已有相关测试。
+4. 检查自定义 Mapper / DAO 方法是否使用清晰的 `get / list / count / insert / delete / update` 数据访问语义；不要为了改名包装 MyBatis-Plus 已有方法。
+5. 项目使用 MyBatis-Plus 时，检查实体 Mapper / DAO 是否继承 `BaseMapper<DO>`，是否重复声明基础 CRUD。
+6. 检查是否使用 `QueryWrapper`、`LambdaQueryWrapper`、`UpdateWrapper` 等 Wrapper；业务条件 SQL 应改为明确 Mapper 方法 + XML。
+7. 检查 XML 是否硬编码业务状态、类型、来源等业务常量；应由 Mapper 参数传入。
+8. 检查参数是否应使用 `#{}`，`${}` 是否确实属于结构并经过白名单。
+9. 检查集合 Mapper 的 Null 契约；标准集合查询无结果不在上层机械增加 Null 兜底。
+10. 检查数据库列与 Java 属性的映射是否明确。
+11. 检查 TypeHandler 是否只承担技术转换。
+12. 动态 SQL 是否清晰且没有隐藏业务流程。
+13. 修改 SQL 时同时读取 `sql.md`。
+14. 涉及事务时读取 `transactions.md`。
+15. 执行目标项目已有相关测试。
 
 检查重点：
 
 * Mapper 是否只负责数据访问；
+* 自定义 Mapper / DAO 方法命名是否准确表达单对象、集合、统计、新增、删除和修改语义；
 * MyBatis-Plus 实体 Mapper 是否正确复用 `BaseMapper`；
+* 是否为了统一命名给 `BaseMapper` 已有方法增加无意义转发包装；
 * 是否使用 Wrapper 把条件 SQL 隐藏在 Java 业务代码中；
 * XML 是否写死本应由 Java 业务契约维护的常量；
 * MyBatis 技术组件是否错误放入业务 Mapper Package；
