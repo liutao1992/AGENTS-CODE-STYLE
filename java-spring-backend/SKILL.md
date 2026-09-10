@@ -44,6 +44,8 @@ description: 按团队后端规范开发、修复和重构 Java、Spring Boot、
 类设计
 Lombok
 class / record
+常量 / Enum / 魔法值
+POJO 属性默认值
 方法设计
 方法参数 / 参数对象
 Null / Optional
@@ -271,6 +273,9 @@ Mock / 集成测试 / Testcontainers
 
 ```text
 普通业务方法参数过多
+→ Java
+
+魔法值 / 常量类 / 固定值域 / POJO 默认值
 → Java
 
 新增业务 module
