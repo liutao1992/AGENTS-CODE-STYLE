@@ -90,7 +90,7 @@ staged changes
 | Spring Framework | [Spring](../java-spring-backend/references/coding/spring.md) | MVC、Validation、DI、Bean、Proxy、Advice |
 | HTTP API | [API](../java-spring-backend/references/api/api-design.md) | URL、Method、Request/VO、响应、错误、兼容、分页、幂等 |
 | 异常跨层 | [异常处理](../java-spring-backend/references/architecture/error-handling.md) | 转换、cause、日志归属、对外泄漏 |
-| MyBatis | [MyBatis](../java-spring-backend/references/coding/mybatis.md) | Mapper、XML、绑定、ResultMap、TypeHandler、集合契约 |
+| MyBatis / MyBatis-Plus | [MyBatis / MyBatis-Plus](../java-spring-backend/references/coding/mybatis.md) | Mapper/DAO、BaseMapper、Wrapper、XML 业务常量、绑定、ResultMap、TypeHandler、集合契约 |
 | SQL | [SQL](../java-spring-backend/references/database/sql.md) | 正确性、范围、注入、安全、PostgreSQL、性能证据 |
 | 数据库 Schema | [数据库设计](../java-spring-backend/references/database/database-design.md) | 类型、Null、约束、索引、Migration、兼容 |
 | 事务 / 锁 / 一致性 | [事务](../java-spring-backend/references/architecture/transactions.md) | 必要性、范围、回滚、传播、隔离、竞态 |
@@ -112,6 +112,12 @@ Controller URL 变化
 
 MyBatis List<T> 后出现 Null 兜底
 → MyBatis + Java
+
+MyBatis-Plus Mapper 未继承 BaseMapper，或出现 Wrapper 条件构建
+→ MyBatis
+
+Mapper XML 写死业务状态 / 类型编码
+→ MyBatis；如果同时判断 SQL 正确性再加 SQL
 
 TransactionTemplate 局部事务
 → 事务 + Spring
