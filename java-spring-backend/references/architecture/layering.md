@@ -548,22 +548,26 @@ Controller → Mapper
 
 模型按职责分类，不把所有数据统一命名为 DTO。
 
-默认模型体系：
+默认模型体系先按 Package / 边界归组，再在组内通过类名表达更细语义：
 
 ```text
-Request → 外部接口操作输入
-Query   → 查询条件和过滤语义
-DTO     → 应用内部数据传输
-BO      → 业务处理中的中间结果 / 组合语义
-DO      → 数据库持久化模型
-VO      → 具体业务接口 / 视图输出
+Request / Query → 入站请求模型，默认同属 <module>.request
+  Request       → 外部接口操作输入
+  Query         → 查询条件和过滤语义
+
+DTO             → 应用内部数据传输，默认 <module>.dto
+BO              → 业务处理中的中间结果 / 组合语义，默认 <module>.bo
+DO              → 数据库持久化模型，默认 <module>.domain
+VO              → 具体业务接口 / 视图输出，默认 <module>.vo
 ```
 
-模型职责和 Package 不要求一一对应。`Request` 与 `Query` 语义不同，但都属于入站请求模型，默认共享 `request` Package：
+这里的 `Request` 与 `Query` 是同一入站请求模型组下的两种语义命名，不对应两个独立 Package。默认关系是：
 
 ```text
-Request → <module>.request
-Query   → <module>.request
+Request ─┐
+         ├→ <module>.request
+Query   ─┘
+
 DTO     → <module>.dto
 BO      → <module>.bo
 DO      → <module>.domain
@@ -749,9 +753,9 @@ PlaceMapper
         ↓
 依赖方向是否单向？
         ↓
-如果是模型，属于 Request / Query / DTO / BO / DO / VO 哪种职责？
+如果是模型，先判断是否属于 Request / Query 入站请求模型组，还是 DTO / BO / DO / VO
         ↓
-根据职责映射到 Package；Request / Query 默认都进入 request
+Request / Query 默认共同进入 request；其他模型再按各自职责映射 Package
         ↓
 再结合 project-structure.md 确定业务模块物理位置
 ```
