@@ -145,13 +145,18 @@ Manager / Service 是否转换异常
 
 Java `catch` / `throw` / 日志 API 同时需要时加载 Java；Web Advice 加载 Spring；HTTP 错误契约加载 API。
 
-### MyBatis
+### MyBatis / MyBatis-Plus
 
-加载 [MyBatis](references/coding/mybatis.md)：
+加载 [MyBatis / MyBatis-Plus](references/coding/mybatis.md)：
 
 ```text
-Mapper 接口
+Mapper / DAO 接口
 Mapper XML
+MyBatis-Plus
+BaseMapper<T>
+QueryWrapper / LambdaQueryWrapper
+UpdateWrapper / LambdaUpdateWrapper
+XML 业务常量
 @Param
 #{}/ ${}
 ResultMap
@@ -285,6 +290,15 @@ Bean Validation 与 Service 重复结构校验
 
 标准 MyBatis List<T> 查询后的 Null 防御
 → MyBatis + Java
+
+项目使用 MyBatis-Plus，新增 Mapper / DAO
+→ MyBatis
+
+发现 QueryWrapper / LambdaQueryWrapper / UpdateWrapper
+→ MyBatis
+
+Mapper XML 中出现业务状态或类型硬编码
+→ MyBatis；如果同时判断 SQL 正确性再加 SQL
 
 第三方 SDK nullable 集合归一化
 → Java；需要判断 Client / Adapter 时再加分层
