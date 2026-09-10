@@ -127,13 +127,22 @@ module/place/
 ├── mapper/                 数据库访问
 ├── client/                 可选：外部技术调用
 ├── adapter/                可选：外部协议适配
-├── request/                接口输入
-├── query/                  查询条件
+├── request/                接口输入：Request / Query
 ├── dto/                    可选：内部数据传输
 ├── bo/                     可选：业务处理中间对象
 ├── domain/                 持久化 DO
 └── vo/                     具体业务输出
 ```
+
+`Request` 与 `Query` 的模型语义仍然不同，但默认共享 `request` Package：
+
+```text
+module.place.request.PlaceSaveRequest
+module.place.request.PlaceAuditRequest
+module.place.request.PlaceQuery
+```
+
+通过类名 `*Request` / `*Query` 表达输入类型，不为了模型分类机械创建独立 `query` Package。
 
 这只是职责地图，不要求每个模块都创建全部目录。
 
@@ -157,12 +166,11 @@ dto
 bo
 client
 adapter
-query
 ```
 
 禁止为了“目录完整”预先创建大量空 Package 或无职责的占位类。
 
-模型职责的唯一详细事实来源是 `layering.md`，不得把 Request、DTO、BO、DO、VO 全部机械塞入一个泛化 `domain` 或 `dto` 目录。
+模型职责的唯一详细事实来源是 `layering.md`。Request 与 Query 默认统一位于 `request`，但仍按模型语义分别命名；DTO、BO、DO、VO 继续按各自真实职责归属，不机械塞入泛化 `domain` 或 `dto` 目录。
 
 ---
 
@@ -328,7 +336,7 @@ CaseService
 PlaceMapper
 ```
 
-`module` 目录的意义之一就是让跨模块依赖更容易识别，而不是把所有代码放到同一 JVM 后任意穿透调用。
+`module` 目录的意义之一就是让跨模块依赖更容易识别，而不是把所有代码放到同一 JVM 后任意穿透调用内部实现。
 
 ---
 
@@ -368,13 +376,14 @@ PlaceMapper
 2. 是否无授权把已有项目强制迁移到 `module` 结构。
 3. 新业务是否优先保持业务内聚，而不是散落到多个全局技术目录。
 4. `module` 内是否只创建真实需要的职责 Package。
-5. 是否把所有模型机械放入 `domain` / `dto`。
-6. `common` 是否出现具体业务语义或成为公共垃圾桶。
-7. 是否无依据创建巨大 `util`、`constant`、`third` 等兜底目录。
-8. 第三方集成是否放在正确的 Client / Adapter 或公共技术边界。
-9. 跨模块调用是否穿透到其他模块 Mapper。
-10. Package 是否由类的真实职责决定，而不是由当前文件位置或调用方便决定。
+5. Query 是否因为模型语义被机械拆到独立 `query` Package；默认应与 Request 一起位于 `request`。
+6. 是否把所有模型机械放入 `domain` / `dto`。
+7. `common` 是否出现具体业务语义或成为公共垃圾桶。
+8. 是否无依据创建巨大 `util`、`constant`、`third` 等兜底目录。
+9. 第三方集成是否放在正确的 Client / Adapter 或公共技术边界。
+10. 跨模块调用是否穿透到其他模块 Mapper。
+11. Package 是否由类的真实职责决定，而不是由当前文件位置或调用方便决定。
 
 最终原则：
 
-> 业务模块负责内聚业务，职责 Package 负责表达边界，`common` 只承载真实公共能力；结构清晰比目录数量多更重要。
+> 业务模块负责内聚业务，职责 Package 负责表达边界；Request 与 Query 默认共享 `request` Package，通过类名区分语义；`common` 只承载真实公共能力，结构清晰比目录数量多更重要。
