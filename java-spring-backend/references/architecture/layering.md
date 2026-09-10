@@ -370,7 +370,7 @@ updatePlace
 saveCase
 ```
 
-Mapper / DAO 的数据访问方法命名由 `mybatis.md` 维护，Service 不为了与数据库操作一一对应而使用 `insert` / `delete` 等持久化术语。
+Mapper / DAO 的具体数据访问方法命名由实际持久层框架规范维护：MyBatis / MyBatis-Plus 读取 `mybatis.md`，Rabbit-SQL 读取 `rabbit-sql.md`。Service 不为了与数据库操作一一对应而使用 `insert` / `delete` 等持久化术语。
 
 原则：
 
@@ -464,7 +464,7 @@ Mapper / DAO 是数据库出站适配边界，负责：
 * 第三方服务调用；
 * 业务事务编排。
 
-MyBatis 具体规则读取 `mybatis.md`；SQL 本身读取 `sql.md`。
+具体框架规则先按实际持久层技术选择：MyBatis / MyBatis-Plus 读取 `mybatis.md`，Rabbit-SQL 读取 `rabbit-sql.md`；SQL 本身统一读取 `sql.md`。不要仅凭接口名叫 Mapper / DAO 就套用某一框架规则。
 
 ---
 
@@ -676,7 +676,7 @@ BO 表达业务处理中有独立语义的中间结果、计算结果或组合�
 
 DO 表达数据库持久化结构。
 
-DO 字段使用 Java 英文业务语义；数据库物理字段可通过 MyBatis 显式映射。
+DO 字段使用 Java 英文业务语义；数据库物理字段通过实际持久层能力显式映射，例如 SQL 列别名或 MyBatis ResultMap，不把数据库物理命名泄漏到业务层。
 
 DO 不直接作为外部 API 输出。
 
