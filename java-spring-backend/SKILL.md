@@ -1,6 +1,6 @@
 ---
 name: java-spring-backend
-description: 按团队后端规范开发、修复和重构 Java、Spring Boot、MyBatis、PostgreSQL 代码。用于实现后端功能、判断职责与模型、设计 API、数据库访问、事务、并发和测试边界；纯代码审查使用 backend-code-review。
+description: 按团队后端规范开发、修复和重构 Java、Spring Boot、MyBatis、MyBatis-Plus、Rabbit-SQL、PostgreSQL 代码。用于实现后端功能、判断职责与模型、设计 API、数据库访问、事务、并发和测试边界；纯代码审查使用 backend-code-review。
 ---
 
 # Java Spring Backend
@@ -152,7 +152,7 @@ Java `catch` / `throw` / 日志 API 同时需要时加载 Java；Web Advice 加�
 加载 [MyBatis / MyBatis-Plus](references/coding/mybatis.md)：
 
 ```text
-Mapper / DAO 接口
+MyBatis Mapper / DAO 接口
 Mapper XML
 MyBatis-Plus
 BaseMapper<T>
@@ -164,12 +164,41 @@ XML 业务常量
 ResultMap
 TypeHandler
 Interceptor / Plugin
-动态 SQL
+MyBatis 动态 SQL
 Mapper List<T> 返回契约
 MyBatis 技术 Package
 ```
 
+看到普通 `Mapper` / `DAO` 名称但无法确认持久层框架时，先检查依赖、注解和 SQL 资源；不要仅凭名称套用 MyBatis-Plus 的 `BaseMapper` / Wrapper 规则。
+
 实际修改 SQL 时再加载 SQL。
+
+### Rabbit-SQL
+
+加载 [Rabbit-SQL](references/coding/rabbit-sql.md)：
+
+```text
+rabbit-sql / rabbit-sql-spring-boot-starter
+@XQLMapper / @XQLMapperScan
+@XQL / @Arg
+Baki / BakiDao
+XQLFileManager
+xql-file-manager.yml
+*.xql
+:name 命名参数
+${} XQL 字符串模板
+#if / #for / #choose 动态 SQL
+@CountQuery / @PageableConfig
+PagedResource / IPageable
+Stream 查询
+Batch
+QueryCacheManager / executionWatcher
+Rabbit-SQL Spring 事务
+```
+
+Rabbit-SQL Mapper 与 MyBatis Mapper 都属于数据库出站适配器，但框架规则不同；`@XQLMapper` 不要求继承 MyBatis-Plus `BaseMapper`，`.xql` 也不是 MyBatis Mapper XML。
+
+实际修改 XQL 中的 SQL 时同时加载 SQL；涉及 Spring 事务时再加载事务和必要的 Spring。
 
 ### SQL / PostgreSQL
 
@@ -203,7 +232,7 @@ Migration
 Schema 兼容
 ```
 
-同时修改 SQL 或 Java 映射时再加载对应 SQL / MyBatis 规范。
+同时修改 SQL 或 Java 映射时再加载对应 SQL / MyBatis / Rabbit-SQL 规范。
 
 ### 事务
 
@@ -305,6 +334,15 @@ Bean Validation 与 Service 重复结构校验
 Mapper XML 中出现业务状态或类型硬编码
 → MyBatis；如果同时判断 SQL 正确性再加 SQL
 
+新增 @XQLMapper / .xql / xql-file-manager.yml
+→ Rabbit-SQL；修改实际 SQL 再加 SQL
+
+Rabbit-SQL 中出现 Baki 直接进入 Service / Controller、${} 外部输入、Stream 生命周期问题
+→ Rabbit-SQL + 必要的分层 / SQL / Java
+
+Rabbit-SQL 与 Spring 事务共同修改
+→ Rabbit-SQL + 事务 + 必要的 Spring
+
 第三方 SDK nullable 集合归一化
 → Java；需要判断 Client / Adapter 时再加分层
 
@@ -312,10 +350,10 @@ Mapper XML 中出现业务状态或类型硬编码
 → MyBatis
 
 修改 Mapper 实际 SQL
-→ MyBatis + SQL
+→ 先识别 MyBatis / Rabbit-SQL，再加载对应框架规范 + SQL
 
 修改表字段和映射
-→ 数据库设计 + MyBatis
+→ 数据库设计 + 对应持久层框架规范
 
 判断事务是否需要 / 边界放在哪里
 → 事务 + 必要的分层
