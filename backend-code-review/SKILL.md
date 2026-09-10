@@ -84,7 +84,7 @@ staged changes
 
 | 涉及领域 | 加载规范 | 主要判断 |
 | --- | --- | --- |
-| Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、参数、Null、集合、异常实现、日志、格式 |
+| Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、常量、Enum、魔法值、POJO 默认值、参数、Null、集合、异常实现、日志、格式 |
 | 项目物理目录 / module | [项目结构](../java-spring-backend/references/architecture/project-structure.md) | 业务模块位置、公共目录、物理组织 |
 | 分层 / 模型 / 职责 Package / SOLID | [分层](../java-spring-backend/references/architecture/layering.md) | 职责、依赖、模型边界、跨模块、过度设计 |
 | Spring Framework | [Spring](../java-spring-backend/references/coding/spring.md) | MVC、Validation、DI、Bean、Proxy、Advice |
@@ -109,6 +109,9 @@ Controller URL 变化
 
 新增 VO Package
 → 分层 + Java
+
+魔法值 / 大而全常量类 / 固定值域 / POJO 默认值
+→ Java
 
 MyBatis List<T> 后出现 Null 兜底
 → MyBatis + Java
