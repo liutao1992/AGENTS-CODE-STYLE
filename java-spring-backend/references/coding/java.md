@@ -86,14 +86,13 @@ mapper
 client
 adapter
 request
-query
 dto
 bo
 domain
 vo
 ```
 
-具体职责和 Package 归属统一读取 `layering.md`；项目物理目录读取 `project-structure.md`。
+`Query` 是模型语义，不要求对应独立 `query` Package；当前默认与 Request 一起放入 `request`。具体职责和 Package 归属统一读取 `layering.md`；项目物理目录读取 `project-structure.md`。
 
 ---
 
@@ -202,6 +201,8 @@ PlaceAuditBO
 PlaceDO
 PlaceDetailVO
 ```
+
+其中 `PlaceQuery` 仍通过类名表达“查询条件”语义，但默认 Package 是 `<module>.request`，不要因为类名以 `Query` 结尾就机械创建独立 `query` Package。
 
 避免在职责已经明确时再使用：
 
@@ -849,7 +850,7 @@ if (condition) return;
 
 修改 Java 代码时检查：
 
-1. 名称是否表达真实英文业务语义，JavaBean 是否使用职责明确的 Request / Query / DTO / BO / DO / VO 等命名，而不是泛化 `Bean / Info / Data / Model`。
+1. 名称是否表达真实英文业务语义，JavaBean 是否使用职责明确的 Request / Query / DTO / BO / DO / VO 等命名，而不是泛化 `Bean / Info / Data / Model`；Query 是否因为类名被无依据拆到独立 `query` Package。
 2. 新类是否有真实独立职责，是否已搜索现有实现。
 3. 模型是否沿用项目 `class` / Lombok 风格，是否机械使用 `@Data` / `record`。
 4. 使用 `@Builder` / `@NoArgsConstructor` 是否来自真实对象构造和框架实例化需求；类级 Builder 是否具有可用构造路径，是否破坏对象不变式或业务规则。
