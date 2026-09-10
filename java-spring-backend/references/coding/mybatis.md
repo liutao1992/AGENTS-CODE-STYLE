@@ -206,9 +206,7 @@ Mapper 方法表达“访问什么数据、按什么条件访问”，不表达�
 例如：
 
 ```java
-int updateStatus(
-        @Param("id") String id,
-        @Param("status") String status);
+int updateStatus(@Param("id") String id, @Param("status") String status);
 ```
 
 查询条件较多时优先使用 Query，而不是不断扩展参数列表或使用：
@@ -225,7 +223,9 @@ Query 的职责和 Package 读取：
 
 - [java.md](java.md#51-控制参数数量)
 
-本文不重复维护第二套阈值。
+方法声明本身的空行和换行风格统一读取 Java 格式规范；能在项目行宽内清晰表达时优先保持单行，不因 `@Param` 机械换行。
+
+本文不重复维护第二套阈值或格式规则。
 
 ### 6.1 集合查询的 Null 契约
 
@@ -401,9 +401,7 @@ WHERE zt = '1'
 应由 Java 调用边界通过 Mapper / DAO 参数显式传入：
 
 ```java
-List<PlaceDO> listByStatusAndType(
-        @Param("status") String status,
-        @Param("type") String type);
+List<PlaceDO> listByStatusAndType(@Param("status") String status, @Param("type") String type);
 ```
 
 ```xml
