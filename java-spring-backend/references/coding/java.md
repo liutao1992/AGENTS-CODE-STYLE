@@ -94,6 +94,85 @@ vo
 
 `Query` 是模型语义，不要求对应独立 `query` Package；当前默认与 Request 一起放入 `request`。具体职责和 Package 归属统一读取 `layering.md`；项目物理目录读取 `project-structure.md`。
 
+### 1.5 设计模式角色应体现在命名中
+
+当模块 / Package、接口、类或方法**确实承担某种设计模式的明确角色**时，命名应尽量体现该模式或其角色语义，使阅读者不需要先展开实现就能够理解主要架构意图。
+
+典型类型命名例如：
+
+```text
+PaymentStrategy
+DefaultPaymentStrategy
+NotificationFactory
+StorageAdapter
+PlaceBuilder
+AuditHandler
+AuditHandlerChain
+ExportCommand
+ExportCommandHandler
+```
+
+如果一个技术子模块或职责 Package 本身就是围绕某种模式组织，也可以使用能够直接表达模式角色的名称，例如：
+
+```text
+strategy
+factory
+adapter
+handler
+command
+```
+
+但业务模块仍优先表达业务能力，例如 `place`、`casecenter`；不能因为模块内部使用了一个 Strategy 就把整个业务模块机械改名为 `placeStrategy`。
+
+方法名称优先体现该模式的典型职责动作，而不是无意义附加模式后缀。例如：
+
+```text
+Builder      → build(...)
+Factory      → create(...) / createXxx(...)
+Command      → execute(...)
+Handler      → handle(...)
+Visitor      → visit(...) / accept(...)
+```
+
+因此普通业务方法应避免没有上下文的 `handle()`、`execute()`；但如果所属类型已经明确是：
+
+```text
+PlaceAuditHandler
+ExportCommand
+```
+
+那么：
+
+```java
+handler.handle(context);
+command.execute();
+```
+
+可以准确表达设计模式角色，不属于无语义命名。
+
+不要反过来为了使用模式名称而制造并不存在的模式。以下名称只有在对应职责真实存在时才使用：
+
+```text
+Strategy
+Factory
+Adapter
+Builder
+Handler
+Command
+Observer
+Visitor
+Template
+Facade
+```
+
+例如只有一个普通分支判断、没有可替换算法族时，不要把类命名成 `XxxStrategy`；普通对象创建方法也不因为返回对象就自动创建 `XxxFactory`。
+
+设计模式是否有真实必要性、是否属于过度设计统一读取 `layering.md`。
+
+原则：
+
+> 先确认模式和角色真实存在，再让命名暴露架构意图；名称用于解释设计，不用于伪造设计。
+
 ---
 
 ## 2. 类设计与 OOP
@@ -409,6 +488,8 @@ handle
 process
 doSomething
 ```
+
+当所属类型已经明确承担 Handler、Command、Visitor 等设计模式角色时，`handle`、`execute`、`visit` 等典型模式动作可以是准确命名，具体读取 1.5 节。
 
 ### 5.1 控制参数数量
 
@@ -851,19 +932,20 @@ if (condition) return;
 修改 Java 代码时检查：
 
 1. 名称是否表达真实英文业务语义，JavaBean 是否使用职责明确的 Request / Query / DTO / BO / DO / VO 等命名，而不是泛化 `Bean / Info / Data / Model`；Query 是否因为类名被无依据拆到独立 `query` Package。
-2. 新类是否有真实独立职责，是否已搜索现有实现。
-3. 模型是否沿用项目 `class` / Lombok 风格，是否机械使用 `@Data` / `record`。
-4. 使用 `@Builder` / `@NoArgsConstructor` 是否来自真实对象构造和框架实例化需求；类级 Builder 是否具有可用构造路径，是否破坏对象不变式或业务规则。
-5. 方法参数是否过多；封装是否基于完整语义、来源、生命周期和信任边界，而不是凑参数数量。
-6. 普通查询条件是否已经适合 Query。
-7. 方法是否因职责混杂而过长，而不是仅根据行数机械拆分。
-8. 已有非 Null 集合契约时是否仍存在重复 Null 防御。
-9. 是否通过默认值或 fallback 掩盖错误。
-10. Optional、泛型、BigDecimal、时间语义是否正确。
-11. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
-12. 日志是否泄漏敏感数据。
-13. 相邻方法之间是否保留清晰空行；方法签名是否能清晰单行时保持单行，只在真正过长或复杂时合理换行。
-14. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
+2. 真实使用 Strategy / Factory / Adapter / Builder / Handler / Command / Visitor 等设计模式时，类型、技术子模块和方法是否体现其模式角色；是否反过来为了名称伪造不需要的设计模式。
+3. 新类是否有真实独立职责，是否已搜索现有实现。
+4. 模型是否沿用项目 `class` / Lombok 风格，是否机械使用 `@Data` / `record`。
+5. 使用 `@Builder` / `@NoArgsConstructor` 是否来自真实对象构造和框架实例化需求；类级 Builder 是否具有可用构造路径，是否破坏对象不变式或业务规则。
+6. 方法参数是否过多；封装是否基于完整语义、来源、生命周期和信任边界，而不是凑参数数量。
+7. 普通查询条件是否已经适合 Query。
+8. 方法是否因职责混杂而过长，而不是仅根据行数机械拆分。
+9. 已有非 Null 集合契约时是否仍存在重复 Null 防御。
+10. 是否通过默认值或 fallback 掩盖错误。
+11. Optional、泛型、BigDecimal、时间语义是否正确。
+12. catch / throw 是否保留失败语义和 cause，是否重复记录异常。
+13. 日志是否泄漏敏感数据。
+14. 相邻方法之间是否保留清晰空行；方法签名是否能清晰单行时保持单行，只在真正过长或复杂时合理换行。
+15. 格式和注释是否遵循项目已有机制且没有扩大无关 diff。
 
 最终原则：
 
