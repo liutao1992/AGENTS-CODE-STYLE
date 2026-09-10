@@ -479,48 +479,72 @@ Controller → Mapper
 默认模型体系：
 
 ```text
-Request → 外部接口输入
-Query   → 查询条件
+Request → 外部接口操作输入
+Query   → 查询条件和过滤语义
 DTO     → 应用内部数据传输
 BO      → 业务处理中的中间结果 / 组合语义
 DO      → 数据库持久化模型
 VO      → 具体业务接口 / 视图输出
 ```
 
-模型职责与“项目物理目录”是两件事：
+模型职责和 Package 不要求一一对应。`Request` 与 `Query` 语义不同，但都属于入站请求模型，默认共享 `request` Package：
+
+```text
+Request → <module>.request
+Query   → <module>.request
+DTO     → <module>.dto
+BO      → <module>.bo
+DO      → <module>.domain
+VO      → <module>.vo
+```
+
+例如：
+
+```text
+module.place.request.PlaceSaveRequest
+module.place.request.PlaceAuditRequest
+module.place.request.PlaceQuery
+module.place.dto.PlaceDTO
+module.place.bo.PlaceAuditBO
+module.place.domain.PlaceDO
+module.place.vo.PlaceDetailVO
+```
+
+不要因为模型类型叫 `Query` 就机械创建：
+
+```text
+module.place.query
+```
+
+模型职责与“项目物理目录”仍然是两件事：
 
 ```text
 业务模块位置
 → project-structure.md
 
-模型职责 Package
+模型语义与职责 Package
 → 本文
 ```
 
-例如：
-
-```text
-module.place.request
-module.place.query
-module.place.dto
-module.place.bo
-module.place.domain
-module.place.vo
-```
-
-只是缺省示意；目标项目已有清晰 Package 结构时优先沿用。
+目标项目已有清晰且稳定的 Package 结构时优先沿用，不为了本默认批量迁移历史代码。
 
 ---
 
 ## 9.1 Request
 
-Request 表达外部调用者能够提交的接口输入。
+Request 表达外部调用者提交的操作型接口输入。
 
 例如：
 
 ```text
-PlaceCreateRequest
+PlaceSaveRequest
 PlaceAuditRequest
+```
+
+默认放入：
+
+```text
+<module>.request
 ```
 
 Request 不应承载客户端无法可信提供的服务端身份信息，例如当前 Operator / Tenant 权限上下文。
@@ -537,6 +561,14 @@ Query 表达查询条件和过滤语义。
 PlaceQuery
 CaseQuery
 ```
+
+Query 在模型语义上仍然独立于普通 Request，但默认与 Request 一起放入：
+
+```text
+<module>.request
+```
+
+通过 `*Query` 类名表达其查询职责，不单独建立 `query` Package。
 
 普通查询条件增多时优先使用 Query，而不是无界方法参数或 `Map<String, Object>`。
 
@@ -647,11 +679,11 @@ PlaceMapper
         ↓
 如果是模型，属于 Request / Query / DTO / BO / DO / VO 哪种职责？
         ↓
-确定职责 Package
+根据职责映射到 Package；Request / Query 默认都进入 request
         ↓
 再结合 project-structure.md 确定业务模块物理位置
 ```
 
 最终原则：
 
-> `project-structure.md` 决定“放在哪个业务模块和物理目录”，`layering.md` 决定“这个类逻辑上是什么、应该依赖谁”。职责先于 Package，Package 先于文件创建。
+> `project-structure.md` 决定“放在哪个业务模块和物理目录”，`layering.md` 决定“这个类逻辑上是什么、应该依赖谁”；Request 与 Query 默认共享 `request` Package，通过类名区分语义。职责先于 Package，Package 先于文件创建。
