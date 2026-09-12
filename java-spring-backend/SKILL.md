@@ -1,6 +1,6 @@
 ---
 name: java-spring-backend
-description: 按团队后端规范开发、修复和重构 Java、Spring Boot、MyBatis、MyBatis-Plus、Rabbit-SQL、PostgreSQL 代码。用于实现后端功能、判断职责与模型、设计 API、数据库访问、事务、并发和测试边界；纯代码审查使用 backend-code-review。
+description: 按团队后端规范开发、修复和重构 Java、Spring Boot、MyBatis、MyBatis-Plus、Rabbit-SQL、PostgreSQL 代码。用于实现后端功能、判断职责、业务规则与模型、设计 API、数据库访问、事务、并发和测试边界；纯代码审查使用 backend-code-review。
 ---
 
 # Java Spring Backend
@@ -92,6 +92,25 @@ SOLID
 ```
 
 涉及物理 module / 目录组织时再加载 `project-structure.md`；涉及模型 Java 写法时再加载 Java。
+
+### 业务规则与用例
+
+加载 [业务规则与用例边界](references/architecture/business-rules.md)：
+
+```text
+核心业务规则 / 稳定不变量
+应用特定业务规则 / 用例流程
+行为业务对象
+Clean Architecture Entity 与持久化 DO 的区别
+Service 作为 Use Case 职责
+贫血模型是否真的构成问题
+业务规则应该放对象还是 Service / Manager
+Request / VO 与应用输入输出模型边界
+核心业务规则的依赖方向
+何时不应该新增 Entity / UseCase / Repository / Command / Result
+```
+
+本文借鉴 Clean Architecture 的职责判断，但不要求目标项目改造成完整 Clean Architecture。涉及具体层间依赖时同时加载 `layering.md`；涉及模型实现时再加载 Java。
 
 ### Spring Framework
 
@@ -313,6 +332,18 @@ Mock / 集成测试 / Testcontainers
 新增 VO / Query / DO
 → 分层 + Java
 
+同一业务状态规则在多个 Service / 入口重复 if + set
+→ 业务规则 + 分层 + Java
+
+判断一条规则应该进入行为业务对象还是留在 Service / Manager
+→ 业务规则 + 分层
+
+Controller Request 是否需要转换成 Command / DTO 才能调用 Service
+→ 业务规则 + 分层；改变 HTTP 契约时再加 API
+
+把传统 CRUD 改造成 Entity / UseCase / Repository 结构
+→ 业务规则 + 分层；先证明稳定不变量、职责收益和目标项目兼容性，不机械迁移
+
 Controller URL 或返回契约变化
 → API + 必要的 Spring
 
@@ -397,7 +428,7 @@ Bug 修复并补回归测试
 是否真的需要新建？
 ```
 
-“业务模块位置”由 `project-structure.md` 负责；“Controller / Service / Manager / Mapper / Client / 模型是什么职责”由 `layering.md` 负责。
+“业务模块位置”由 `project-structure.md` 负责；“Controller / Service / Manager / Mapper / Client / 模型是什么职责”由 `layering.md` 负责；“核心业务规则与应用用例流程如何分层”由 `business-rules.md` 负责。
 
 ---
 
