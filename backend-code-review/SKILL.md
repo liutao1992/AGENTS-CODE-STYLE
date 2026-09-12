@@ -1,6 +1,6 @@
 ---
 name: backend-code-review
-description: 审查 Java、Spring Boot、MyBatis、MyBatis-Plus、Rabbit-SQL、PostgreSQL 后端代码或变更，按需加载团队规范，检查正确性、分层、API、数据库、事务、并发、安全和测试，并输出有定位与证据的 findings；纯审查默认只读。
+description: 审查 Java、Spring Boot、MyBatis、MyBatis-Plus、Rabbit-SQL、PostgreSQL 后端代码或变更，按需加载团队规范，检查正确性、业务规则、分层、API、数据库、事务、并发、安全和测试，并输出有定位与证据的 findings；纯审查默认只读。
 ---
 
 # Backend Code Review
@@ -18,7 +18,7 @@ description: 审查 Java、Spring Boot、MyBatis、MyBatis-Plus、Rabbit-SQL、P
 输出格式
 ```
 
-具体 Java、分层、API、Spring、MyBatis、Rabbit-SQL、SQL、数据库、事务、并发和测试规则直接读取 `java-spring-backend/references`，不在本文件维护第二套规范。
+具体 Java、业务规则、分层、API、Spring、MyBatis、Rabbit-SQL、SQL、数据库、事务、并发和测试规则直接读取 `java-spring-backend/references`，不在本文件维护第二套规范。
 
 ---
 
@@ -87,6 +87,7 @@ staged changes
 | Java 实现 | [Java](../java-spring-backend/references/coding/java.md) | 命名、类设计、常量、Enum、魔法值、POJO 默认值、参数、Null、集合、异常实现、日志、格式 |
 | 项目物理目录 / module | [项目结构](../java-spring-backend/references/architecture/project-structure.md) | 业务模块位置、公共目录、物理组织 |
 | 分层 / 模型 / 职责 Package / SOLID | [分层](../java-spring-backend/references/architecture/layering.md) | 职责、依赖、模型边界、跨模块、过度设计 |
+| 业务规则层级 / Use Case / Entity 概念 | [业务规则](../java-spring-backend/references/architecture/business-rules.md) | 核心不变量、应用流程、行为业务对象、持久化 DO 边界、输入输出模型是否需要隔离 |
 | Spring Framework | [Spring](../java-spring-backend/references/coding/spring.md) | MVC、Validation、DI、Bean、Proxy、Advice |
 | HTTP API | [API](../java-spring-backend/references/api/api-design.md) | URL、Method、Request/VO、响应、错误、兼容、分页、幂等 |
 | 异常跨层 | [异常处理](../java-spring-backend/references/architecture/error-handling.md) | 转换、cause、日志归属、对外泄漏 |
@@ -110,6 +111,12 @@ Controller URL 变化
 
 新增 VO Package
 → 分层 + Java
+
+同一稳定状态规则在多个 Service / 入口重复 if + set
+→ 业务规则 + 分层 + Java
+
+新增 Entity / UseCase / Repository / Command / Result 结构
+→ 业务规则 + 分层；确认是否存在真实职责收益，不能仅按架构流派报问题
 
 魔法值 / 大而全常量类 / 固定值域 / POJO 默认值
 → Java
@@ -270,6 +277,40 @@ Baki / MyBatis API
 确认实际框架后再加载对应 reference。
 
 不得对 Rabbit-SQL `@XQLMapper` 报告“未继承 MyBatis-Plus BaseMapper”，也不得把 MyBatis Mapper XML 按 XQL 规则审查。
+
+### 7.7 “贫血模型”与 Clean Architecture 误判
+
+详细规则读取 `business-rules.md`。
+
+不能仅因为：
+
+```text
+DO 只有字段
+业务判断位于 Service
+项目没有 Entity / UseCase / Repository
+Controller 直接调用 Service
+```
+
+就报告架构问题。
+
+只有存在具体证据时才形成 finding，例如：
+
+* 同一稳定业务不变量在多个用例重复实现并已出现语义漂移；
+* 调用者可以绕过关键状态约束直接修改状态，导致业务契约可被破坏；
+* 所谓核心业务对象反向依赖 Spring、Mapper、Client 或外部协议类型；
+* 为了套用架构模式新增多层同字段模型和纯转发类，已经产生真实维护成本或错误风险。
+
+同样，不得机械建议：
+
+```text
+把 Service 全部拆成 UseCase
+把 DO 全部改成富 Entity
+给 Mapper 外再套 Repository
+所有 Request 都转 Command
+所有 VO 前都增加 Result
+```
+
+必须说明当前规则为什么属于稳定核心不变量或应用流程，以及调整后能够消除什么真实风险。
 
 ---
 
